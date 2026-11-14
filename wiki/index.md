@@ -1,7 +1,7 @@
 ---
 title: Index
 stage: develop
-updated_at: 2026-11-14T10:05Z
+updated_at: 2026-11-14T11:25Z
 ---
 
 # Index des pages
@@ -10,6 +10,7 @@ updated_at: 2026-11-14T10:05Z
 
 - [NovaForge](project/novaforge.md) — fiche produit, modules, principes, plan v1.4
 - [Boucle d'outils et streaming](project/entity-boucle-outils-streaming.md) — boucle d'outils, moteur NovaCore, protocole SSE (v1.4 étape 1)
+- [Passerelle de paiement automatisée](project/entity-passerelle-paiement.md) — adaptateurs, test de connexion réel, webhook signé, idempotence (v1.4 étape 2)
 - [Vue d'ensemble](overview.md) — synthèse du projet et de l'état d'avancement
 
 ## Journal

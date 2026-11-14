@@ -15,14 +15,27 @@ const LLM = require('./lib/llm');
 const NOVACORE = require('./lib/novacore');
 const MCP = require('./lib/mcp');
 const AUTO = require('./lib/automation');
+const PAY = require('./lib/payments');
 const GEN = require('./generator');
 const RUNTIME = require('./generator/runtime');
 const RESOURCES = require('./lib/resources');
 
 const PORT = process.env.PORT || 8080;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const today = () => new Date().toISOString().slice(0, 10);
+
+/** URL publique de la plateforme (derivée de la requête, ou forcée par l'environnement). */
+function publicBase(r) {
+  if (process.env.NOVAFORGE_PUBLIC_URL) return String(process.env.NOVAFORGE_PUBLIC_URL).replace(/\/+$/, '');
+  const req = r && r.req;
+  if (!req) return '';
+  const host = req.headers.host || '';
+  if (!host) return '';
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() ||
+    (req.socket && req.socket.encrypted ? 'https' : 'http');
+  return proto + '://' + host;
+}
 
 // ---------- Base par défaut ----------
 function seedDefaults() {
@@ -549,6 +562,52 @@ route('POST', '/api/v1/billing/payment/:id/cancel', (r) => {
   db.table('payments').update(p.id, { status: 'cancelled' });
   return { body: { ok: true } };
 });
+
+// ----- Passerelle de paiement automatisée (v1.4) -----
+// Le flux mobile money manuel ci-dessus reste inchangé : c'est un chemin
+// parallèle, validé manuellement par le Super Admin.
+route('GET', '/api/v1/billing/gateway', (r) => ({ body: { gateway: PAY.publicGateway() } }));
+
+route('POST', '/api/v1/billing/gateway/checkout', async (r) => {
+  const u = r.user;
+  const plan = getPlan(r.body.plan_id);
+  if (!plan || plan.price <= 0) return { code: 400, body: { error: 'Choisissez une offre payante valide.' } };
+  const gw = PAY.activeGateway();
+  if (!gw) {
+    return { code: 409, body: { error: 'Aucune passerelle de paiement automatique active. Utilisez le paiement manuel (M-Pesa, Orange Money, Airtel Money).' } };
+  }
+  const idempotencyKey = U.safeStr(r.body.idempotency_key, 80) || null;
+  // Idempotence : un seul paiement « en cours » par (utilisateur, offre, passerelle).
+  const existing = PAY.findLiveCheckout({ userId: u.id, planId: plan.id, gatewayId: gw.id, idempotencyKey });
+  if (existing) return { body: { ok: true, reused: true, payment: PAY.publicPayment(existing) } };
+  const base = publicBase(r);
+  const callbackUrl = base ? base + '/api/v1/payments/webhook/' + gw.id : '';
+  const res = await PAY.createCheckout({ user: u, plan, gateway: gw, idempotencyKey, baseUrl: base, callbackUrl });
+  if (!res.ok) return { code: 502, body: { error: res.error } };
+  logAudit(u, 'billing.gateway_checkout', plan.id, { gateway: gw.name, amount: res.payment.amount, currency: res.payment.currency });
+  return { body: { ok: true, payment: PAY.publicPayment(res.payment) } };
+});
+
+route('GET', '/api/v1/billing/payment/:id', (r) => {
+  const p = db.table('payments').get(parseInt(r.params.id));
+  if (!p || p.user_id !== r.user.id) return { code: 404, body: { error: 'Paiement introuvable.' } };
+  return { body: { payment: PAY.publicPayment(p) } };
+});
+
+// ----- Webhook de paiement (public, authentifié par signature) -----
+// La signature porte sur le corps brut : aucune donnée n'est lue avant sa
+// vérification. La passerelle doit toujours recevoir un HTTP 200 (ou 503 pour
+// une erreur temporaire, afin qu'elle réessaie).
+route('POST', '/api/v1/payments/webhook/:id', async (r) => {
+  const gw = PAY.getGateway(parseInt(r.params.id));
+  if (!gw) return { code: 404, body: { error: 'Passerelle inconnue.' } };
+  const res = await PAY.handleWebhook({ gateway: gw, rawBody: r.rawBody, headers: r.req.headers });
+  if (res.status === 200) {
+    logAudit(null, 'payment_gateway.webhook', gw.name, { action: res.action, payment: res.payment ? res.payment.id : null });
+    return { body: { ok: true, action: res.action, message: res.message || '' } };
+  }
+  return { code: res.status, body: { error: res.error } };
+}, { auth: 'public', rawBody: true });
 
 // ----- Projets -----
 route('GET', '/api/v1/projects', (r) => {
@@ -1179,8 +1238,12 @@ route('POST', '/api/v1/admin/payments/:id', (r) => {
   if (action === 'validate') {
     const plan = getPlan(p.plan_id);
     const user = A.users().get(p.user_id);
+    if (!plan || !user) return { code: 404, body: { error: 'Utilisateur ou offre introuvable.' } };
+    if (p.status === 'validated') return { code: 409, body: { error: 'Ce paiement a déjà été validé.' } };
     const expires = new Date(Date.now() + 30 * 864e5).toISOString();
-    db.table('payments').update(p.id, { status: 'validated', admin_note: U.safeStr(r.body.note, 300) || '', validated_by: r.user.id, validated_at: U.now() });
+    // Même comptabilité que la passerelle : brut / commission (10 %) / net.
+    const split = PAY.computeSplit(plan.price);
+    db.table('payments').update(p.id, { status: 'validated', admin_note: U.safeStr(r.body.note, 300) || '', validated_by: r.user.id, validated_at: U.now(), gross: split.gross, commission: split.commission, net: split.net });
     A.users().update(user.id, { plan_id: plan.id, subscription: { plan_id: plan.id, status: 'active', expires_at: expires, since: U.now() } });
     logAudit(r.user, 'billing.payment_validated', user.email, { plan: plan.id });
     return { body: { ok: true, message: `Abonnement ${plan.name} activé pour ${user.email} (30 jours).` } };
@@ -1188,6 +1251,59 @@ route('POST', '/api/v1/admin/payments/:id', (r) => {
   if (action === 'reject') {
     db.table('payments').update(p.id, { status: 'rejected', admin_note: U.safeStr(r.body.note, 300) || 'rejeté' });
     logAudit(r.user, 'billing.payment_rejected', '', { payment: p.id });
+    return { body: { ok: true } };
+  }
+  return { code: 400, body: { error: 'Action inconnue.' } };
+});
+
+// ----- Passerelle de paiement automatisée (Super Admin) -----
+// Miroir du patron fournisseurs IA : configuration serveur, test de connexion
+// réel, statut « actif » uniquement après succès, secrets jamais renvoyés
+// en clair (seule une empreinte masquée est exposée).
+route('GET', '/api/v1/admin/payment-gateways', (r) => {
+  const g = adminGate(r, 'billing.manage'); if (g) return g;
+  return { body: {
+    gateways: PAY.listGateways(),
+    types: PAY.BUILTIN.map((b) => ({
+      type: b.type, label: b.label, documented: b.documented,
+      default_base: b.base_url, default_currency: b.currency,
+      create_path: b.create_path, test_path: b.test_path,
+      webhook_scheme: b.webhook_scheme, webhook_header: b.webhook_header,
+    })),
+  } };
+});
+
+route('POST', '/api/v1/admin/payment-gateways', (r) => {
+  const g = adminGate(r, 'billing.manage'); if (g) return g;
+  const res = PAY.createGateway(r.body);
+  if (!res.ok) return { code: 400, body: { error: res.error } };
+  logAudit(r.user, 'payment_gateway.add', res.gateway.name, { type: res.gateway.type });
+  return { body: { ok: true, gateway: PAY.listGateways().find((x) => x.id === res.gateway.id) } };
+});
+
+route('POST', '/api/v1/admin/payment-gateways/:id', async (r) => {
+  const g = adminGate(r, 'billing.manage'); if (g) return g;
+  const gw = PAY.getGateway(parseInt(r.params.id));
+  if (!gw) return { code: 404, body: { error: 'Passerelle introuvable.' } };
+  const action = r.body.action;
+  if (action === 'update') {
+    PAY.updateGateway(gw, r.body);
+    logAudit(r.user, 'payment_gateway.update', gw.name, {});
+    return { body: { ok: true, gateway: PAY.listGateways().find((x) => x.id === gw.id) } };
+  }
+  if (action === 'test') {
+    const res = await PAY.testGateway(gw.id);
+    logAudit(r.user, 'payment_gateway.test', gw.name, { ok: res.ok });
+    return { body: { ok: res.ok, error: res.error, gateway: PAY.listGateways().find((x) => x.id === gw.id) } };
+  }
+  if (action === 'toggle') {
+    PAY.gateways().update(gw.id, { enabled: gw.enabled === false });
+    return { body: { ok: true, gateway: PAY.listGateways().find((x) => x.id === gw.id) } };
+  }
+  if (action === 'delete') {
+    if (r.body.confirmed !== true) return { code: 400, body: { error: 'Confirmation requise.' } };
+    PAY.gateways().remove(gw.id);
+    logAudit(r.user, 'payment_gateway.delete', gw.name, {});
     return { body: { ok: true } };
   }
   return { code: 400, body: { error: 'Action inconnue.' } };
@@ -1399,7 +1515,10 @@ const server = http.createServer(async (rawReq, rawRes) => {
   const url = new URL(rawReq.url, 'http://localhost');
   const pathStr = decodeURIComponent(url.pathname);
   const cookies = U.parseCookies(rawReq.headers.cookie);
-  if ((pathStr.startsWith('/api/v1/') || pathStr.startsWith('/run/')) && rejectCrossSiteMutation(rawReq, rawRes)) return;
+  // Les webhooks de paiement sont signés : le contrôle d'origine du navigateur
+  // ne s'y applique pas (l'appel vient de la passerelle, pas d'une page).
+  const isWebhook = pathStr.startsWith('/api/v1/payments/webhook/');
+  if (!isWebhook && (pathStr.startsWith('/api/v1/') || pathStr.startsWith('/run/')) && rejectCrossSiteMutation(rawReq, rawRes)) return;
 
   // --- API ---
   if (pathStr === '/api/v1/uploads' && rawReq.method === 'POST') {
@@ -1440,9 +1559,24 @@ const server = http.createServer(async (rawReq, rawRes) => {
     const m = matchRoute(rawReq.method, pathStr);
     if (!m) return send(rawRes, 404, { error: 'Route introuvable.' });
     const { route: rt, params } = m;
-    const body = ['POST', 'PUT', 'PATCH'].includes(rawReq.method) ? await readBody(rawReq) : {};
+    let body = {};
+    let rawBody = null;
+    if (['POST', 'PUT', 'PATCH'].includes(rawReq.method)) {
+      if (rt.opts.rawBody) {
+        // Webhook signé : le corps brut est conservé tel quel (la signature porte
+        // sur les octets exacts reçus, pas sur un JSON re-sérialisé).
+        try {
+          rawBody = await readRawBody(rawReq, 1024 * 1024);
+          try { body = JSON.parse(rawBody.toString('utf8')); } catch { body = {}; }
+        } catch (e) {
+          return send(rawRes, 413, { error: e.message || 'Corps de requête trop volumineux.' });
+        }
+      } else {
+        body = await readBody(rawReq);
+      }
+    }
     const r = {
-      res: rawRes, params, body, cookies,
+      res: rawRes, params, body, rawBody, cookies,
       query: Object.fromEntries(url.searchParams),
       ip: rawReq.headers['x-forwarded-for'] || rawReq.socket.remoteAddress || '',
       ua: rawReq.headers['user-agent'] || '',

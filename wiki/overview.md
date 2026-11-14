@@ -25,11 +25,11 @@ projet.
 
 ## Ce qui est en cours (v1.4)
 
-1. Boucle d'outils + streaming pour l'assistant et les agents IA.
+1. Boucle d'outils + streaming pour l'assistant et les agents IA — **livré**.
 2. Passerelle de paiement automatisée (Candy / Flutterwave), sur le modèle du
-   patron « fournisseur IA » déjà en place.
-3. Durcissement SSRF par épinglage d'IP (anti-DNS-rebinding).
-4. Suite de tests élargie et documentation à jour.
+   patron « fournisseur IA » déjà en place — **livré**.
+3. Durcissement SSRF par épinglage d'IP (anti-DNS-rebinding) — en cours.
+4. Suite de tests élargie et documentation à jour — à venir.
 
 ## Contraintes structurantes
 

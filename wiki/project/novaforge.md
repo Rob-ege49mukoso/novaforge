@@ -4,7 +4,7 @@ type: product
 stage: develop
 status: active
 version: 1.3.0
-updated_at: 2026-11-14T09:25Z
+updated_at: 2026-11-14T11:25Z
 ---
 
 # NovaForge
@@ -80,7 +80,7 @@ SECURITY_NOTES).
 historique est conservé (le SSE ne s'active que sur demande explicite du
 client) ; NovaCore devient un fournisseur d'outils à part entière.
 
-### 2. Passerelle de paiement automatisée (Candy / Flutterwave)
+### 2. Passerelle de paiement automatisée (Candy / Flutterwave) — **livré le 2026-11-14**
 
 - Modèle sur le patron déjà éprouvé des fournisseurs IA : configuration
   côté Super Admin, **test de connexion réel**, statut « actif » uniquement
@@ -92,6 +92,13 @@ client) ; NovaCore devient un fournisseur d'outils à part entière.
 - Aucune transaction simulée : sans identifiants merchant, le gateway reste
   inactif et le statut le dit.
 
+**État :** livré. Adaptateur Flutterwave sur contrat officiel documenté,
+adaptateur « Candy » générique entièrement décrit par le Super Admin (aucun
+endpoint inventé). Webhook signé idempotent, contrôle du montant et de la
+devise, onglet « Passerelle » côté Super Admin, tunnel de paiement côté
+utilisateur. Détail : [Passerelle de paiement
+automatisée](entity-passerelle-paiement.md).
+
 ### 3. Durcissement SSRF : épinglage d'IP (anti-DNS-rebinding)
 
 - `server/lib/network.js` valide la résolution DNS puis `fetch()` résout de
@@ -100,6 +107,7 @@ client) ; NovaCore devient un fournisseur d'outils à part entière.
   conservant la vérification TLS du nom d'hôte ; re-valider à chaque
   redirection ; couvrir IPv6 et IPv4 mappées.
 - Corrige la limite explicitement documentée dans SECURITY_NOTES.
+
 
 ### 4. Suite de tests automatisés élargie + documentation v1.4
 

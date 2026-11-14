@@ -37,3 +37,12 @@ Cette révision corrige plusieurs risques identifiés lors de l'audit du ZIP d'o
 - Le moteur ne reçoit que du texte explicitement pris en charge, borné à 24 Ko au total et marqué comme contenu non fiable. Les fichiers binaires ne sont jamais exécutés.
 - Les copies GZIP et les conversions texte passent par le quota utilisateur et ne remplacent jamais l’original.
 - Les images, médias, PDF et archives restent attachés comme références ; l’analyse visuelle/audio/vidéo et l’extraction ZIP ne sont pas prises en charge par cette version.
+
+## Version 1.4.0 — passerelle de paiement automatisée
+
+- Les clés marchandes (clé secrète, secret de signature du webhook) ne quittent jamais le serveur : elles sont stockées côté serveur et l’interface ne reçoit qu’une empreinte masquée. Aucun secret n’est renvoyé en clair par l’API.
+- Une passerelle n’est déclarée « active » qu’après un **test de connexion réel** réussi. Sans identifiants marchands, ou sans chemin de test décrit pour l’adaptateur générique, elle reste « non configurée » et le statut le dit. Aucune transaction n’est simulée.
+- Les notifications de paiement sont authentifiées par signature sur le **corps brut** de la requête : HMAC-SHA256 (hexadécimal ou base64) pour l’adaptateur générique, comparaison à temps constant de l’en-tête `verif-hash` documenté par Flutterwave. Aucune notification n’est acceptée sans signature, ni avec une signature calculée sur un corps différent.
+- Traitement idempotent : une notification rejouée n’active pas un second abonnement ; un montant ou une devise divergents de ce qui a été facturé n’activent rien ; une transaction en échec n’active rien.
+- L’activation automatique ne porte que sur l’offre achetée (30 jours), comme la validation manuelle du Super Admin. Le flux mobile money manuel (M-Pesa, Orange Money, Airtel Money) reste intact et reste validé manuellement.
+- Le webhook est public par nature : il est authentifié par signature, pas par session, et le contrôle d’origine du navigateur ne s’y applique pas.

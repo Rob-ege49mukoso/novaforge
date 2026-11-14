@@ -961,7 +961,10 @@ window.NFX = (function () {
 
   // ---------- Billing ----------
   async function viewBilling() {
-    const [plans, me] = await Promise.all([api('plans'), api('billing/me')]);
+    const [plans, me, gwr] = await Promise.all([api('plans'), api('billing/me'), api('billing/gateway')]);
+    const gw = (gwr && gwr.gateway) || { available: false };
+    N._payPayments = me.payments || [];
+    const gwPending = N._payPayments.find((p) => p.method === 'gateway' && p.status === 'pending' && p.checkout_url);
     const step = (N._payStep || 0);
     let paySection = '';
     if (step === 1) {
@@ -982,8 +985,9 @@ window.NFX = (function () {
         <div class="row"><button class="btn" id="paySubmit">Envoyer pour validation</button><button class="btn ghost" id="payBack">← Retour</button></div>
       </div>`;
     }
-    const pending = me.payments.find((p) => p.status === 'pending');
+    const pending = me.payments.find((p) => p.status === 'pending' && p.method !== 'gateway');
     const statusBadgePay = (s) => s === 'validated' ? '<span class="badge ok">Validé</span>' : s === 'rejected' ? `<span class="badge err">Rejeté</span>` : s === 'cancelled' ? '<span class="badge mut">Annulé</span>' : '<span class="badge warn">En attente de validation</span>';
+    const gwBadge = (s) => s === 'validated' ? '<span class="badge ok">Payé — activé ✓</span>' : s === 'failed' ? '<span class="badge err">Échec du paiement</span>' : s === 'mismatch' ? '<span class="badge err">Montant non conforme</span>' : '<span class="badge warn">En attente du paiement…</span>';
     return shell('Abonnement & paiements', `
       <div class="card sec" style="border-color:var(--bord2)"><div class="row"><b>Plan actuel : ${esc(me.plan.name)}</b><span class="sp"></span>${me.subscription && me.subscription.expires_at ? `<span class="muted small">expire le ${fmt(me.subscription.expires_at)}</span>` : '<span class="muted small">sans expiration</span>'}</div></div>
       <div class="grid g4 sec">${plans.plans.map((p) => `
@@ -996,15 +1000,23 @@ window.NFX = (function () {
             <li>${p.apps_per_day >= 100 ? 'Limites techniques de sécurité incluses' : 'Max ' + p.apps_per_day + ' application(s)/jour'}</li>
           </ul>
           ${p.price > 0 && p.id !== me.plan.id ? `<button class="btn ${p.id === 'premium_soft' ? 'grad' : 'ghost'} block" data-choose="${p.id}">Choisir ${esc(p.name)}</button>` : p.price === 0 ? '<button class="btn ghost block" disabled>Plan de base</button>' : '<button class="btn ghost block" disabled>Plan actuel</button>'}
+          ${p.price > 0 && p.id !== me.plan.id && gw.available ? `<button class="btn ghost block" style="margin-top:6px" data-gwbuy="${p.id}">💳 Payer par ${esc(gw.type_label)}</button>` : ''}
         </div>`).join('')}</div>
       ${paySection}
+      ${gw.available ? `<div class="card sec" style="border-color:rgba(96,165,250,.4)"><div class="row"><div style="flex:1"><h3>💳 Paiement automatique — ${esc(gw.name)}</h3>
+        <p class="muted small" style="margin-top:8px">Passerelle en devise <b>${esc(gw.currency)}</b>${gw.price_multiplier && gw.price_multiplier !== 1 ? ` (montant facturé = prix du plan × ${esc(gw.price_multiplier)})` : ''}. Vous êtes redirigé vers la page de paiement du prestataire ; l’abonnement <b>${esc(gw.type_label)}</b> s’active automatiquement dès que la passerelle confirme la transaction (notification signée). Aucun intermédiaire ne peut activer un abonnement sans ce retour signé.</p></div></div></div>` : ''}
+      ${gwPending ? `<div class="card sec" style="border-color:rgba(251,191,36,.45)"><h3>💳 Paiement en cours chez ${esc(gwPending.gateway_type || 'la passerelle')}</h3>
+        <p class="muted small" style="margin:8px 0">Référence <b class="mono">${esc(gwPending.reference)}</b> · montant ${money(gwPending.amount)} ${esc(gwPending.currency || '')} · offre ${esc(gwPending.plan_id)}. L’abonnement s’active automatiquement dès que la passerelle confirme le paiement.</p>
+        <button class="btn sm" data-gwresume="${gwPending.id}">Reprendre le paiement</button></div>` : ''}
       ${pending ? `<div class="card sec" style="border-color:rgba(251,191,36,.45)"><h3>💡 Demande en attente de validation</h3>
         <p class="muted small" style="margin:8px 0">Référence <b class="mono">${esc(pending.reference)}</b> via ${esc(pending.method)} pour le plan ${esc(pending.plan_id)}. <b>L’abonnement ne devient actif qu’après validation explicite du Super Admin</b> (aucune activation automatique).</p>
         <button class="btn sm ghost" data-cancelPay="${pending.id}">Annuler cette demande</button></div>` : ''}
       <div class="grid g2 sec">
         <div class="card"><h3 style="margin-bottom:12px">Mes demandes de paiement</h3>
-          <table class="tbl"><thead><tr><th>Plan</th><th>Méthode</th><th>Réf.</th><th>Statut</th><th>Date</th></tr></thead><tbody>
-          ${me.payments.map((p) => `<tr><td>${esc(p.plan_id)}</td><td>${esc(p.method)}</td><td class="mono">${esc(p.reference)}</td><td>${statusBadgePay(p.status)}</td><td class="muted small">${fmt(p.created_at)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Aucune demande.</td></tr>'}</tbody></table>
+          <table class="tbl"><thead><tr><th>Plan</th><th>Méthode</th><th>Réf.</th><th>Montant</th><th>Statut</th><th>Date</th></tr></thead><tbody>
+          ${me.payments.map((p) => `<tr><td>${esc(p.plan_id)}</td><td>${p.method === 'gateway' ? '🏦 ' + esc(p.gateway_type || 'passerelle') : esc(p.method)}</td><td class="mono">${esc(p.reference)}</td>
+          <td>${p.amount != null ? money(p.amount) + (p.currency ? ' ' + esc(p.currency) : '') : '—'}${p.commission != null ? `<div class="muted small">brut ${money(p.gross)} · commission ${money(p.commission)} · net ${money(p.net)}</div>` : ''}</td>
+          <td>${p.method === 'gateway' ? gwBadge(p.status) : statusBadgePay(p.status)}</td><td class="muted small">${fmt(p.created_at)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Aucune demande.</td></tr>'}</tbody></table>
         </div>
         <div class="card"><h3 style="margin-bottom:12px">💰 Revenus (projets publiés) — commission plateforme ${Math.round((me.totals && me.totals.fee ? 0 : 0.1) * 100)}%</h3>
           <div class="grid g3" style="margin-bottom:12px">
@@ -1020,6 +1032,21 @@ window.NFX = (function () {
   }
 
   function bindBilling(plans) {
+    document.querySelectorAll('[data-gwbuy]').forEach((b) => (b.onclick = async () => {
+      b.innerHTML = '<span class="spin"></span> Initialisation…';
+      try {
+        const d = await api('billing/gateway/checkout', { method: 'POST', body: { plan_id: b.dataset.gwbuy } });
+        const url = d.payment && d.payment.checkout_url;
+        if (!url) return toast('Lien de paiement indisponible — réessayez.', 'err');
+        toast(d.reused ? 'Paiement déjà initialisé — redirection…' : 'Redirection vers la page de paiement…', 'ok');
+        setTimeout(() => { location.href = url; }, 500);
+      } catch (e) { toast(e.message, 'err'); render(); }
+    }));
+    document.querySelectorAll('[data-gwresume]').forEach((b) => (b.onclick = () => {
+      const p = (N._payPayments || []).find((x) => x.id === parseInt(b.dataset.gwresume));
+      if (p && p.checkout_url) location.href = p.checkout_url;
+      else toast('Lien de paiement indisponible.', 'err');
+    }));
     document.querySelectorAll('[data-choose]').forEach((b) => (b.onclick = () => {
       N._payPlan = b.dataset.choose;
       N._payStep = 0.5;
@@ -1247,7 +1274,7 @@ window.NFX = (function () {
     if (N.user.role !== 'super_admin') return shell('Administration', '<div class="empty">🔒 Cette zone est réservée au <b>Super Admin</b> (propriétaire de la plateforme).</div>');
     const tab = (location.hash.split('?')[1] || '').match(/tab=(\w+)/);
     const t = tab ? tab[1] : 'overview';
-    const tabs = [['overview', '📊 Vue d’ensemble'], ['users', '👥 Utilisateurs'], ['payments', '💳 Paiements'], ['projects', '🕵️ Modération'], ['plans', '🏷️ Tarifs & quotas'], ['settings', '⚙️ Paramètres'], ['logs', '📜 Journaux']];
+    const tabs = [['overview', '📊 Vue d’ensemble'], ['users', '👥 Utilisateurs'], ['payments', '💳 Paiements'], ['gateways', '🏦 Passerelle'], ['projects', '🕵️ Modération'], ['plans', '🏷️ Tarifs & quotas'], ['settings', '⚙️ Paramètres'], ['logs', '📜 Journaux']];
     let body = '';
     if (t === 'overview') {
       const s = await api('admin/stats');
@@ -1313,6 +1340,64 @@ window.NFX = (function () {
         const note = act === 'validate' ? 'OK' : (prompt('Motif du rejet :') || '');
         try { await api('admin/payments/' + id, { method: 'POST', body: { action: act, note } }); toast(act === 'validate' ? 'Abonnement activé ✓' : 'Paiement rejeté.', 'ok'); render(); } catch (err) { toast(err.message, 'err'); }
       }, { once: false });
+    }
+    if (t === 'gateways') {
+      const s = await api('admin/payment-gateways');
+      N._gwTypes = s.types || [];
+      const stBadgeG = (g) => ({
+        active: '<span class="badge ok">✓ Active — test de connexion réussi</span>',
+        error: `<span class="badge err">✗ ${esc((g.last_error || 'Échec du test').slice(0, 90))}</span>`,
+        unconfigured: '<span class="badge warn">Non configurée — testez la connexion</span>',
+      }[g.status] || `<span class="badge mut">${esc(g.status)}</span>`);
+      body = `<div class="card sec">
+        <div class="row"><div style="flex:1"><h3>🏦 Passerelle de paiement automatisée</h3>
+        <p class="muted small">Une passerelle n’est <b>active</b> qu’après un <b>test de connexion réel</b> réussi — aucun statut n’est déclaré « connecté » à l’avance. Les secrets restent côté serveur : le navigateur ne reçoit qu’une empreinte masquée. Le flux mobile money manuel (M-Pesa / Orange / Airtel) continue de fonctionner en parallèle, avec validation explicite du Super Admin.</p></div>
+        <button class="btn sm" id="addGw">＋ Ajouter une passerelle</button></div>
+        <div style="margin-top:14px">
+        ${s.gateways.map((g) => `<div class="card" style="margin-bottom:10px">
+          <div class="row"><b>${esc(g.name)}</b><span class="chip">${esc(g.type_label)}</span>${g.documented ? '' : '<span class="badge mut">adaptateur générique</span>'}<span class="sp"></span>${stBadgeG(g)}${g.enabled === false ? '<span class="badge mut">désactivée</span>' : ''}</div>
+          <div class="muted small" style="margin:8px 0">${g.base_url ? `<span class="mono">${esc(g.base_url)}</span>` : '<span class="badge warn">URL de base absente</span>'} · devise ${esc(g.currency || '—')} · multiplicateur ${esc(g.price_multiplier)} · ${g.has_secret ? `clé ${esc(g.secret_hint)}` : '<span class="badge warn">clé secrète absente</span>'} · webhook ${g.has_webhook_secret ? esc(g.webhook_secret_hint) : '<span class="badge warn">secret webhook absent</span>'}</div>
+          <div class="muted small" style="margin:4px 0">URL de notification à copier dans le tableau de bord du gateway :<br><span class="mono">${esc(location.origin + '/api/v1/payments/webhook/' + g.id)}</span></div>
+          <div class="row wrap"><button class="btn sm ghost" data-gtest="${g.id}">🔍 Tester la connexion</button><button class="btn sm ghost" data-gtog="${g.id}">${g.enabled === false ? 'Activer' : 'Désactiver'}</button><button class="btn sm ghost" data-gedit="${g.id}">Éditer</button><button class="btn sm danger" data-gdel="${g.id}">Supprimer</button></div>
+        </div>`).join('') || '<div class="empty">Aucune passerelle configurée. Ajoutez <b>Flutterwave</b> (contrat officiel v3) ou un <b>adaptateur générique</b> dont vous décrivez le contrat (URL, secret, chemins, schéma de signature).</div>'}
+        </div>
+      </div>
+      <div id="gwForm" style="display:none"><div class="card sec">
+        <h3 id="gwFormTitle">Ajouter une passerelle</h3>
+        <p class="muted small" style="margin-bottom:12px">🔑 <b>La clé secrète marchande est le seul champ obligatoire.</b> Les secrets sont stockés côté serveur et ne sont jamais renvoyés au navigateur : laissez le champ vide pour conserver la clé existante. Toute modification remet le statut à « non configurée » — relancez le test de connexion.</p>
+        <div class="grid g2">
+          <div class="field"><label>Type de passerelle</label><select class="inp" id="gwType">${N._gwTypes.map((x) => `<option value="${x.type}">${esc(x.label)}</option>`).join('')}</select></div>
+          <div class="field"><label>Nom</label><input class="inp" id="gwName" placeholder="ex. : Flutterwave production"></div>
+          <div class="field"><label>URL de base</label><input class="inp mono" id="gwBase" placeholder="https://api.flutterwave.com/v3"></div>
+          <div class="field"><label>Clé secrète marchande * (jamais renvoyée au navigateur)</label><input class="inp mono" id="gwSecret" type="password" autocomplete="off" placeholder="FLWSECK_TEST-…"></div>
+          <div class="field"><label>Secret de signature du webhook (Flutterwave : le secret défini dans son tableau de bord — vide = clé secrète)</label><input class="inp mono" id="gwHookSecret" type="password" autocomplete="off"></div>
+          <div class="field"><label>Devise facturée</label><input class="inp mono" id="gwCurrency" placeholder="USD"></div>
+          <div class="field"><label>Multiplicateur de conversion (1 = montant du plan)</label><input class="inp" type="number" id="gwMult" value="1" min="0.000001" step="any"></div>
+        </div>
+        <div id="gwAdv" style="display:none">
+          <h4 class="small" style="margin:20px 0 6px">Contrat du gateway (adaptateur générique)</h4>
+          <p class="muted small" style="margin-bottom:12px">Aucun endpoint n’est supposé : décrivez les chemins et les schémas de réponse de votre gateway. Sans ces informations, l’adaptateur refuse de démarrer et la passerelle reste inactive.</p>
+          <div class="grid g2">
+            <div class="field"><label>Chemin de création de paiement *</label><input class="inp mono" id="gwCreate" placeholder="/payments"></div>
+            <div class="field"><label>Chemin de vérification ({id} = identifiant)</label><input class="inp mono" id="gwVerify" placeholder="/payments/{id}"></div>
+            <div class="field"><label>Chemin de test de connexion *</label><input class="inp mono" id="gwTest" placeholder="/health"></div>
+            <div class="field"><label>Schéma d’authentification</label><select class="inp" id="gwAuthScheme"><option value="bearer">Bearer (Authorization: Bearer …)</option><option value="header">En-tête brut</option><option value="body">Corps de la requête</option></select></div>
+            <div class="field"><label>En-tête d’authentification</label><input class="inp mono" id="gwAuthHeader" value="Authorization"></div>
+            <div class="field"><label>Préfixe de l’en-tête d’authentification</label><input class="inp mono" id="gwAuthPrefix" value="Bearer "></div>
+            <div class="field"><label>Signature du webhook</label><select class="inp" id="gwHookScheme"><option value="hmac_sha256">HMAC-SHA256 du corps reçu</option><option value="plain">Secret renvoyé par le gateway</option></select></div>
+            <div class="field"><label>En-tête de signature</label><input class="inp mono" id="gwHookHeader" value="x-signature"></div>
+            <div class="field"><label>Encodage de la signature</label><select class="inp" id="gwHookEnc"><option value="hex">hexadécimal</option><option value="base64">base64</option></select></div>
+            <div class="field"><label>Chemin du lien de paiement (réponse)</label><input class="inp mono" id="gwLinkPath" value="link"></div>
+            <div class="field"><label>Chemin de l’identifiant de transaction</label><input class="inp mono" id="gwIdPath" value="id"></div>
+            <div class="field"><label>Chemin de la référence</label><input class="inp mono" id="gwRefPath" value="reference"></div>
+            <div class="field"><label>Chemin du montant</label><input class="inp mono" id="gwAmountPath" value="amount"></div>
+            <div class="field"><label>Chemin de la devise</label><input class="inp mono" id="gwCurrencyPath" value="currency"></div>
+            <div class="field"><label>Chemin du statut</label><input class="inp mono" id="gwStatusPath" value="status"></div>
+            <div class="field"><label>Statuts de succès (séparés par des virgules)</label><input class="inp mono" id="gwSuccess" value="successful,success,paid,completed"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:16px"><button class="btn" id="gwSave">Enregistrer</button><button class="btn ghost" id="gwCancel">Annuler</button></div>
+      </div></div>`;
     }
     if (t === 'projects') {
       const s = await api('admin/projects');
@@ -1415,6 +1500,130 @@ window.NFX = (function () {
 
   function bindAdmin() {
     document.querySelectorAll('[data-atab]').forEach((b) => (b.onclick = () => { location.hash = '#/admin?tab=' + b.dataset.atab; }));
+    bindGateways();
+  }
+
+  // ---------- Passerelle de paiement (Super Admin) ----------
+  function applyGwType(reset) {
+    const type = $('#gwType') ? $('#gwType').value : 'flutterwave';
+    const meta = (N._gwTypes || []).find((x) => x.type === type) || {};
+    if ($('#gwAdv')) $('#gwAdv').style.display = type === 'candy' ? 'block' : 'none';
+    if (!$('#gwBase')) return;
+    if (reset || !$('#gwBase').value) $('#gwBase').value = meta.default_base || '';
+    if (reset || !$('#gwCurrency').value) $('#gwCurrency').value = meta.default_currency || 'USD';
+    if (!reset) return;
+    $('#gwCreate').value = meta.create_path || '';
+    $('#gwTest').value = meta.test_path || '';
+    $('#gwHookScheme').value = meta.webhook_scheme || 'hmac_sha256';
+    $('#gwHookHeader').value = meta.webhook_header || 'x-signature';
+  }
+
+  function bindGateways() {
+    if ($('#gwType')) $('#gwType').onchange = () => applyGwType(false);
+    if ($('#addGw')) $('#addGw').onclick = () => {
+      N._editGw = null;
+      $('#gwForm').style.display = 'block';
+      $('#gwFormTitle').textContent = 'Ajouter une passerelle';
+      $('#gwName').value = ''; $('#gwSecret').value = ''; $('#gwHookSecret').value = '';
+      $('#gwCurrency').value = ''; $('#gwMult').value = 1;
+      applyGwType(true);
+      $('#gwForm').scrollIntoView({ behavior: 'smooth' });
+    };
+    if ($('#gwCancel')) $('#gwCancel').onclick = () => { $('#gwForm').style.display = 'none'; };
+    if ($('#gwSave')) $('#gwSave').onclick = async () => {
+      const type = $('#gwType').value;
+      const cfg = {};
+      if (type === 'candy') {
+        cfg.create_path = $('#gwCreate').value.trim();
+        cfg.verify_path = $('#gwVerify').value.trim();
+        cfg.test_path = $('#gwTest').value.trim();
+        cfg.auth_scheme = $('#gwAuthScheme').value;
+        cfg.auth_header = $('#gwAuthHeader').value.trim();
+        cfg.auth_prefix = $('#gwAuthPrefix').value;
+        cfg.webhook_scheme = $('#gwHookScheme').value;
+        cfg.webhook_header = $('#gwHookHeader').value.trim();
+        cfg.webhook_encoding = $('#gwHookEnc').value;
+        cfg.checkout_url_path = $('#gwLinkPath').value.trim();
+        cfg.payment_id_path = $('#gwIdPath').value.trim();
+        cfg.ref_path = $('#gwRefPath').value.trim();
+        cfg.amount_path = $('#gwAmountPath').value.trim();
+        cfg.currency_path = $('#gwCurrencyPath').value.trim();
+        cfg.status_path = $('#gwStatusPath').value.trim();
+        cfg.success_values = $('#gwSuccess').value.split(',').map((x) => x.trim()).filter(Boolean);
+      }
+      const body = {
+        name: $('#gwName').value.trim(), type,
+        base_url: $('#gwBase').value.trim(),
+        secret: $('#gwSecret').value,
+        webhook_secret: $('#gwHookSecret').value,
+        currency: $('#gwCurrency').value.trim().toUpperCase(),
+        price_multiplier: parseFloat($('#gwMult').value),
+        config: cfg,
+      };
+      try {
+        if (N._editGw) await api('admin/payment-gateways/' + N._editGw, { method: 'POST', body: { action: 'update', ...body } });
+        else await api('admin/payment-gateways', { method: 'POST', body });
+        toast('Passerelle enregistrée. Lancez un test de connexion : elle ne devient active qu’après un test réussi.', 'ok');
+        render();
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    if (N._gwBound) return;
+    N._gwBound = true;
+    document.body.addEventListener('click', async (e) => {
+      const t = e.target.closest('[data-gtest]');
+      if (t) {
+        t.innerHTML = '<span class="spin"></span> Test en cours…';
+        try {
+          const d = await api('admin/payment-gateways/' + t.dataset.gtest, { method: 'POST', body: { action: 'test' } });
+          toast(d.ok ? 'Connexion réussie — passerelle active ✓' : 'Test échoué : ' + (d.error || ''), d.ok ? 'ok' : 'err');
+          render();
+        } catch (err) { toast(err.message, 'err'); }
+        return;
+      }
+      const tg = e.target.closest('[data-gtog]');
+      if (tg) { try { await api('admin/payment-gateways/' + tg.dataset.gtog, { method: 'POST', body: { action: 'toggle' } }); render(); } catch (err) { toast(err.message, 'err'); } return; }
+      const ed = e.target.closest('[data-gedit]');
+      if (ed) {
+        const d = await api('admin/payment-gateways');
+        const g = (d.gateways || []).find((x) => x.id === parseInt(ed.dataset.gedit));
+        if (!g) return;
+        N._editGw = g.id;
+        const c = g.config || {};
+        $('#gwForm').style.display = 'block';
+        $('#gwFormTitle').textContent = 'Éditer : ' + g.name;
+        $('#gwType').value = g.type;
+        $('#gwName').value = g.name || '';
+        $('#gwBase').value = g.base_url || '';
+        $('#gwSecret').value = '';
+        $('#gwHookSecret').value = '';
+        $('#gwCurrency').value = g.currency || '';
+        $('#gwMult').value = g.price_multiplier === undefined ? 1 : g.price_multiplier;
+        $('#gwCreate').value = c.create_path || '';
+        $('#gwVerify').value = c.verify_path || '';
+        $('#gwTest').value = c.test_path || '';
+        $('#gwAuthScheme').value = c.auth_scheme || 'bearer';
+        $('#gwAuthHeader').value = c.auth_header || 'Authorization';
+        $('#gwAuthPrefix').value = c.auth_prefix != null ? c.auth_prefix : 'Bearer ';
+        $('#gwHookScheme').value = c.webhook_scheme || 'hmac_sha256';
+        $('#gwHookHeader').value = c.webhook_header || 'x-signature';
+        $('#gwHookEnc').value = c.webhook_encoding || 'hex';
+        $('#gwLinkPath').value = c.checkout_url_path || 'link';
+        $('#gwIdPath').value = c.payment_id_path || 'id';
+        $('#gwRefPath').value = c.ref_path || 'reference';
+        $('#gwAmountPath').value = c.amount_path || 'amount';
+        $('#gwCurrencyPath').value = c.currency_path || 'currency';
+        $('#gwStatusPath').value = c.status_path || 'status';
+        $('#gwSuccess').value = (c.success_values || ['successful', 'success', 'paid', 'completed']).join(', ');
+        applyGwType(false);
+        $('#gwForm').scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+      const dl = e.target.closest('[data-gdel]');
+      if (dl) {
+        if (!await confirmModal('Supprimer cette passerelle ?', 'La clé secrète et la configuration seront effacées du serveur.')) return;
+        try { await api('admin/payment-gateways/' + dl.dataset.gdel, { method: 'POST', body: { action: 'delete', confirmed: true } }); toast('Passerelle supprimée.', 'ok'); render(); } catch (err) { toast(err.message, 'err'); }
+      }
+    });
   }
 
   // ---------- Paramètres ----------

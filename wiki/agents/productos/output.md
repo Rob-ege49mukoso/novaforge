@@ -1,7 +1,7 @@
 ---
 title: ProductOS — journal d'orchestration
 stage: develop
-updated_at: 2026-11-14T09:26Z
+updated_at: 2026-11-14T11:05Z
 ---
 
 # ProductOS — journal d'orchestration
@@ -31,3 +31,55 @@ updated_at: 2026-11-14T09:26Z
 - En attente : les étapes 2, 3 et 4 seront dispatchées une par une, chacune
   après validation de la précédente. Points de contrôle : le moteur local ne
   doit jamais casser, aucune transaction simulée ne doit apparaître.
+
+## 2026-11-14T11:05Z — Étape 1 validée, étape 2 dispatchée
+
+- Étape 1 (boucle d'outils + streaming) confirmée livrée : `runToolLoop` dans
+  `server/lib/llm.js`, moteur local NovaCore extrait dans `server/lib/novacore.js`,
+  streaming SSE sur les deux endpoints de chat (mode JSON conservé), UI avec
+  indicateur de saisie et bouton d'arrêt. 22 tests `node --test` verts.
+- État du code relu avant dispatch : routes de facturation `server/app.js`
+  (~L509-551), validation admin des paiements (~L1168-1191), réglages
+  commission + méthodes manuelles (~L1258-1284), calcul brut/commission/net
+  (~L1293-1305), patron fournisseurs IA de référence (`server/lib/llm.js` :
+  `testProvider` + `listProviders`, sortie HTTP bornée par
+  `server/lib/network.js`), table générique `db.table(...)` sans schéma.
+- Étape 2 dispatchée au Fullstack Builder : `server/lib/payments.js`
+  (adaptateurs gateway, test de connexion réel, init paiement, webhook HMAC,
+  idempotence, activation auto de l'offre), routes admin + table
+  `payment_gateways`, secrets jamais en clair, flux mobile money et commission
+  10 % préservés, `node --test` vert.
+- Point d'honnêteté transmis : Candy traité en adaptateur générique
+  configurable (base_url / secret / signature) — aucun endpoint non vérifié ne
+  doit être inventé ; le gateway reste inactif sans identifiants merchant.
+- Résultat : **QUEUED** — démarrage automatique en fin de tour.
+- En attente : étapes 3 (épinglage d'IP anti-DNS-rebinding) et 4 (tests
+  élargis + documentation v1.4) à dispatcher une par une.
+
+## 2026-11-14T11:25Z — Étape 2 validée, étape 3 dispatchée
+
+- Étape 2 (passerelle de paiement automatisée) confirmée livrée et relue dans
+  le code : `server/lib/payments.js` — adaptateur Flutterwave sur contrat
+  officiel documenté, adaptateur générique « Candy » sans aucun endpoint
+  inventé, test de connexion réel, secrets jamais renvoyés en clair
+  (empreinte masquée), webhook signé idempotent avec contrôle du montant et
+  de la devise, activation automatique 30 jours, commission 10 % et flux
+  mobile money manuel préservés. Routes admin `/api/v1/admin/payment-gateways`,
+  tunnel `/api/v1/billing/gateway/checkout`, onglet « Passerelle » côté Super
+  Admin, `test/payments.test.js`.
+- Notes consignées : fiche produit (v1.4 point 2 marqué livré), page
+  « Passerelle de paiement automatisée », index, vue d'ensemble, journal.
+- État du code relu avant dispatch : `server/lib/network.js` résout le DNS
+  puis chaque appelant refait `fetch(url)` — la résolution rejouée laisse une
+  fenêtre TOCTOU exploitable (DNS rebinding). Appels sortants à migrer :
+  `automation.js`, `llm.js`, `mcp.js`, `payments.js`, `app.js`.
+- Étape 3 dispatchée au Fullstack Builder : épinglage d'IP — résolution unique,
+  validation de toutes les adresses, connexion à l'adresse validée en
+  conservant la vérification TLS du nom d'hôte, re-validation à chaque
+  redirection, IPv6 et IPv4 mappées, zéro dépendance npm (`node:http` /
+  `node:https` + `lookup` personnalisé).
+- Contraintes transmises : ne pas réécrire l'étape 2, `readLimited` doit
+  rester compatible, `node --test` vert, tests rebinding / redirection / IPv6,
+  `SECURITY_NOTES.md` à jour.
+- Résultat : **QUEUED** — démarrage automatique en fin de tour.
+- En attente : étape 4 (tests élargis + documentation v1.4).
