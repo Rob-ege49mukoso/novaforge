@@ -6,7 +6,7 @@ const db = require('./db');
 const fs = require('fs');
 const path = require('path');
 const { now } = require('./util');
-const { validateOutboundUrl, readLimited } = require('./network');
+const { requestOutbound, readLimited } = require('./network');
 
 const WS = path.join(__dirname, '..', '..', 'automation_ws');
 const TASKS = () => db.table('automation_tasks');
@@ -133,9 +133,11 @@ async function executeAction(action) {
       const p = action.params;
       add(`${p.method || 'GET'} ${p.url}`);
       try {
-        const url = await validateOutboundUrl(p.url, { requireHttps: process.env.NODE_ENV === 'production' });
-        const r = await fetch(url, { method: p.method || 'GET', headers: p.headers || {}, body: p.body || undefined, redirect: 'error', signal: AbortSignal.timeout(15000) });
-        const text = await readLimited(r, 1024 * 1024);
+        const r = await requestOutbound(p.url, {
+          method: p.method || 'GET', headers: p.headers || {}, body: p.body || undefined,
+          timeoutMs: 15000, requireHttps: process.env.NODE_ENV === 'production',
+        });
+        const text = await readLimited(r.body, 1024 * 1024);
         add(`HTTP ${r.status} — ${text.slice(0, 2000)}`);
       } catch (e) {
         add('ERREUR RÉSEAU: ' + e.message);
@@ -148,9 +150,8 @@ async function executeAction(action) {
       if (!u) return { ok: false, log: ['Aucune URL fournie.'] };
       add('GET ' + u);
       try {
-        const url = await validateOutboundUrl(u, { requireHttps: process.env.NODE_ENV === 'production' });
-        const r = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000) });
-        const text = await readLimited(r, 1024 * 1024);
+        const r = await requestOutbound(u, { timeoutMs: 15000, requireHttps: process.env.NODE_ENV === 'production' });
+        const text = await readLimited(r.body, 1024 * 1024);
         add(`HTTP ${r.status} — ${Math.round(text.length / 1024)} Ko`);
         add('Extrait: ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 1200));
       } catch (e) {

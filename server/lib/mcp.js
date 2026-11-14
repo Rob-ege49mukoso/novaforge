@@ -3,7 +3,7 @@
 // Les secrets restent côté serveur : l'API ne renvoie jamais la valeur brute.
 const db = require('./db');
 const { now, maskSecret } = require('./util');
-const { validateOutboundUrl, readLimited } = require('./network');
+const { requestOutbound, readLimited } = require('./network');
 
 const servers = () => db.table('mcp_servers');
 
@@ -33,27 +33,20 @@ function authHeaders(s) {
 }
 
 async function rpc(server, method, params, timeoutMs = 12000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const url = await validateOutboundUrl(server.url, { requireHttps: process.env.NODE_ENV === 'production' });
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...authHeaders(server) },
-      body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params: params || {} }),
-      signal: ctrl.signal,
-      redirect: 'error',
-    });
-    const text = await readLimited(r);
-    // Certains serveurs MCP répondent en SSE (data: {...})
-    let json = null;
-    const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
-    const payload = dataLine ? dataLine.slice(5).trim() : text;
-    try { json = JSON.parse(payload); } catch { json = null; }
-    return { http: r.status, json, text };
-  } finally {
-    clearTimeout(t);
-  }
+  const r = await requestOutbound(server.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...authHeaders(server) },
+    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params: params || {} }),
+    timeoutMs,
+    requireHttps: process.env.NODE_ENV === 'production',
+  });
+  const text = await readLimited(r.body);
+  // Certains serveurs MCP répondent en SSE (data: {...})
+  let json = null;
+  const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+  const payload = dataLine ? dataLine.slice(5).trim() : text;
+  try { json = JSON.parse(payload); } catch { json = null; }
+  return { http: r.status, json, text };
 }
 
 /** Test réel : initialize puis tools/list. */

@@ -99,7 +99,7 @@ devise, onglet « Passerelle » côté Super Admin, tunnel de paiement côté
 utilisateur. Détail : [Passerelle de paiement
 automatisée](entity-passerelle-paiement.md).
 
-### 3. Durcissement SSRF : épinglage d'IP (anti-DNS-rebinding)
+### 3. Durcissement SSRF : épinglage d'IP (anti-DNS-rebinding) — **livré le 2026-11-14**
 
 - `server/lib/network.js` valide la résolution DNS puis `fetch()` résout de
   nouveau : fenêtre TOCTOU exploitable.
@@ -108,6 +108,16 @@ automatisée](entity-passerelle-paiement.md).
   redirection ; couvrir IPv6 et IPv4 mappées.
 - Corrige la limite explicitement documentée dans SECURITY_NOTES.
 
+**État :** livré. Nouveau client `requestOutbound()` : une seule résolution
+DNS, validation de **toutes** les adresses, connexion à l'adresse validée via
+un `lookup` personnalisé (`node:http`/`node:https`, zéro dépendance), nom
+d'hôte conservé pour l'en-tête `Host`, le SNI et la vérification du
+certificat, redirections suivies mais re-résolues et re-validées à chaque
+saut. IPv6 et IPv4 mappées (`::ffff:`, NAT64) traitées explicitement. Tous
+les appels sortants passent par ce client : fournisseurs IA (dont le
+streaming SSE), MCP, automatisations, passerelle de paiement, outil
+`web_fetch` des agents. Limites résolues retirées de SECURITY_NOTES.
+Détail : [Épinglage d'IP](entity-epinglage-ip.md).
 
 ### 4. Suite de tests automatisés élargie + documentation v1.4
 

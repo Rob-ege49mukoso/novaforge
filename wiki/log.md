@@ -1,7 +1,7 @@
 ---
 title: Journal
 stage: develop
-updated_at: 2026-11-14T11:25Z
+updated_at: 2026-11-14T11:40Z
 ---
 
 # Journal
@@ -38,3 +38,16 @@ updated_at: 2026-11-14T11:25Z
   réel, statut actif seulement après succès, clés jamais renvoyées en clair.
   Flux mobile money manuel et commission 10 % conservés ; aucune transaction
   simulée.
+- **2026-11-14T11:40Z** — v1.4 étape 3 livrée : durcissement SSRF par épinglage d'IP.
+  Nouveau client `requestOutbound()` dans `server/lib/network.js` : une seule
+  résolution DNS par requête, validation de TOUTES les adresses obtenues, puis
+  connexion à l'adresse validée via un `lookup` personnalisé (`node:http` /
+  `node:https`, zéro dépendance npm). Le nom d'hôte est conservé pour l'en-tête
+  `Host`, le SNI et la vérification du certificat — qui n'est ni désactivée ni
+  contournée. Les redirections sont suivies (3 sauts) mais chacune est
+  re-résolue et re-validée. IPv6 et IPv4 mappées (`::ffff:`, NAT64) contrôlées
+  via les règles IPv4. Tous les appels sortants passent par ce client :
+  fournisseurs IA (dont le streaming SSE), MCP, automatisations, passerelle de
+  paiement, outil `web_fetch` des agents. Limites SSRF obsolètes retirées de
+  SECURITY_NOTES. `node --test` : 48 tests verts (10 nouveaux dans
+  `test/network.test.js`). Voir [Épinglage d'IP](project/entity-epinglage-ip.md).

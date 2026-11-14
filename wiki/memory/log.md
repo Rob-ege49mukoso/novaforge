@@ -19,3 +19,10 @@ updated_at: 2026-11-14T10:05Z
   (épinglage d'IP anti-DNS-rebinding dans `server/lib/network.js`) dispatchée
   au Fullstack Builder.
 2026-11-14T11:24:44.529Z run productos-orchestrator: Vas-y — Étape 2 livrée et vérifiée dans le code. Je consigne, puis j'engage l'étape 3. Étape 2 vérifiée et consignée : la passerelle de paiement automatisée est bien en place — module dédié avec adaptateur Flutterwave sur contrat officiel et adaptateur générique « Candy » sans aucun endpoint inventé, test de connexion réel avant toute activation, secrets jamais renvoyés en clair, webhook signé et idempotent avec contrôle du montant et de la devise, activation automatique de l'offre, commission 10 % et flux mobile money manuel intacts. Côté interface : onglet « Passerelle » côté Super Admin et tunnel de paiement côté utilisateur, avec 14 tests dédiés. J'ai relu le point faible qu'on visait à l'étape… <!-- productos-run:fb7y9zc4y8dx6ih3rjae167l -->
+- **2026-11-14T11:40Z** — v1.4 étape 3 livrée : durcissement SSRF par
+  épinglage d'IP dans `server/lib/network.js` — une seule résolution DNS,
+  validation de toutes les adresses, connexion à l'adresse validée (lookup
+  personnalisé), nom d'hôte conservé pour le SNI et la vérification du
+  certificat, redirections re-validées, IPv6 et IPv4 mappées traitées. Appliqué
+  à tous les appels sortants ; limites SSRF obsolètes retirées de
+  SECURITY_NOTES. Étape 4 (tests élargis + documentation v1.4) restante.

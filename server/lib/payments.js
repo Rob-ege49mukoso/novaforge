@@ -29,7 +29,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const A = require('./auth');
 const { now, uid, maskSecret } = require('./util');
-const { validateOutboundUrl, readLimited } = require('./network');
+const { requestOutbound, readLimited } = require('./network');
 
 const gateways = () => db.table('payment_gateways');
 const payments = () => db.table('payments');
@@ -184,28 +184,25 @@ function computeSplit(gross, rate) {
 }
 
 // ---------- Requêtes HTTP sortantes (toujours via server/lib/network.js) ----------
+// Résolution DNS unique, validation de toutes les adresses, connexion à
+// l'adresse validée (épinglage d'IP) : une passerelle ne peut pas être
+// redirigée vers une IP privée entre la validation et l'appel.
 async function httpJSON(url, { method = 'GET', headers = {}, body } = {}, timeoutMs = 20000) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const target = new URL(url);
-    // HTTPS obligatoire, sauf loopback en développement (tests, intégration locale).
-    const loopbackOk = process.env.NODE_ENV !== 'production' && isLoopbackHost(target.hostname);
-    const safeUrl = await validateOutboundUrl(url, { requireHttps: !loopbackOk, allowLoopback: loopbackOk });
-    const r = await fetch(safeUrl, {
-      method,
-      redirect: 'error',
-      signal: ctrl.signal,
-      headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
-      body,
-    });
-    const text = await readLimited(r, MAX_RESPONSE_BYTES);
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* réponse non JSON */ }
-    return { ok: r.ok, status: r.status, json, text };
-  } finally {
-    clearTimeout(timer);
-  }
+  const target = new URL(url);
+  // HTTPS obligatoire, sauf loopback en développement (tests, intégration locale).
+  const loopbackOk = process.env.NODE_ENV !== 'production' && isLoopbackHost(target.hostname);
+  const r = await requestOutbound(url, {
+    method,
+    headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
+    body,
+    timeoutMs,
+    requireHttps: !loopbackOk,
+    allowLoopback: loopbackOk,
+  });
+  const text = await readLimited(r.body, MAX_RESPONSE_BYTES);
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* réponse non JSON */ }
+  return { ok: r.status >= 200 && r.status < 300, status: r.status, json, text };
 }
 
 /** En-têtes d'authentification selon le schéma retenu par l'adaptateur. */

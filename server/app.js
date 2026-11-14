@@ -4,7 +4,7 @@
 // les routes sont déclaratives (table `routes`) → ajouter un module = ajouter des routes.
 const http = require('http');
 const { AsyncLocalStorage } = require('async_hooks');
-const { validateOutboundUrl, readLimited } = require('./lib/network');
+const { requestOutbound, readLimited } = require('./lib/network');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -275,9 +275,8 @@ async function runAgentTool(user, name, args) {
     const url = (args || {}).url;
     if (!/^https?:\/\//i.test(String(url || ''))) return { error: 'URL invalide.' };
     try {
-      const safeUrl = await validateOutboundUrl(url, { requireHttps: process.env.NODE_ENV === 'production' });
-      const r = await fetch(safeUrl, { signal: AbortSignal.timeout(15000), redirect: 'error' });
-      const text = await readLimited(r, 1024 * 1024);
+      const r = await requestOutbound(url, { timeoutMs: 15000, requireHttps: process.env.NODE_ENV === 'production' });
+      const text = await readLimited(r.body, 1024 * 1024);
       return { status: r.status, url: String(url), extrait: text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 800) };
     } catch (e) { return { error: e.message }; }
   }

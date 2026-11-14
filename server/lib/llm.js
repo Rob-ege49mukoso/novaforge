@@ -10,7 +10,7 @@
 // local NovaCore, qui produit des appels d'outils au même format normalisé.
 const db = require('./db');
 const { now } = require('./util');
-const { validateOutboundUrl, readLimited } = require('./network');
+const { requestOutbound, readLimited } = require('./network');
 
 const providers = () => db.table('ai_providers');
 const usage = () => db.table('ai_usage');
@@ -43,22 +43,23 @@ function getProvider(id) {
   return providers().get(id);
 }
 
+/**
+ * Appel HTTP sortant — résolution unique, adresse épinglée (anti-DNS-rebinding).
+ * Les redirections sont re-validées une par une par server/lib/network.js.
+ */
 async function httpJSON(url, opts, timeoutMs = 20000, allowLoopback = false) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const safeUrl = await validateOutboundUrl(url, {
-      requireHttps: process.env.NODE_ENV === 'production' && !allowLoopback,
-      allowLoopback,
-    });
-    const r = await fetch(safeUrl, { ...opts, redirect: 'error', signal: ctrl.signal, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
-    const text = await readLimited(r, 5 * 1024 * 1024);
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* pas du JSON */ }
-    return { status: r.status, json, text };
-  } finally {
-    clearTimeout(t);
-  }
+  const r = await requestOutbound(url, {
+    method: (opts && opts.method) || 'GET',
+    headers: { 'Content-Type': 'application/json', ...((opts && opts.headers) || {}) },
+    body: opts && opts.body,
+    timeoutMs,
+    requireHttps: process.env.NODE_ENV === 'production' && !allowLoopback,
+    allowLoopback,
+  });
+  const text = await readLimited(r.body, 5 * 1024 * 1024);
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* pas du JSON */ }
+  return { status: r.status, json, text };
 }
 
 // ---------- Lecture d'un flux SSE distant ----------
@@ -84,37 +85,36 @@ function parseSSEFrame(frame) {
  * onFrame({event, data}) est appelé dès qu'une trame est reçue (incrémental).
  */
 async function httpSSE(url, opts, onFrame, timeoutMs = 45000, allowLoopback = false) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  const onAbort = () => ctrl.abort();
-  if (opts.signal) {
-    if (opts.signal.aborted) ctrl.abort();
-    else opts.signal.addEventListener('abort', onAbort, { once: true });
-  }
+  const netError = (e) => {
+    const aborted = opts.signal && opts.signal.aborted;
+    return { ok: false, error: aborted ? 'Génération interrompue.' : 'Erreur réseau : ' + (e.name === 'AbortError' ? 'timeout' : e.message) };
+  };
+  let res;
   try {
-    const safeUrl = await validateOutboundUrl(url, {
+    res = await requestOutbound(url, {
+      method: (opts && opts.method) || 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...((opts && opts.headers) || {}) },
+      body: opts && opts.body,
+      signal: opts && opts.signal,
+      timeoutMs,
       requireHttps: process.env.NODE_ENV === 'production' && !allowLoopback,
       allowLoopback,
     });
-    const r = await fetch(safeUrl, {
-      ...opts, redirect: 'error', signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...(opts.headers || {}) },
-    });
-    if (r.status !== 200) {
-      const text = await readLimited(r, 64 * 1024);
-      return { ok: false, status: r.status, error: `HTTP ${r.status} : ${String(text || '').slice(0, 300)}` };
-    }
-    if (!r.body) return { ok: true, status: r.status };
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '';
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_STREAM_BYTES) { try { await reader.cancel(); } catch { /* ignore */ } break; }
-      buf += dec.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+  } catch (e) {
+    return netError(e);
+  }
+  if (res.status !== 200) {
+    const text = await readLimited(res.body, 64 * 1024);
+    return { ok: false, status: res.status, error: `HTTP ${res.status} : ${String(text || '').slice(0, 300)}` };
+  }
+  const dec = new TextDecoder();
+  let buf = '';
+  let total = 0;
+  try {
+    for await (const chunk of res.body) {
+      total += chunk.length;
+      if (total > MAX_STREAM_BYTES) { try { res.body.destroy(); } catch { /* ignore */ } break; }
+      buf += dec.decode(chunk, { stream: true }).replace(/\r\n/g, '\n');
       let idx;
       while ((idx = buf.indexOf('\n\n')) !== -1) {
         const frame = buf.slice(0, idx);
@@ -123,14 +123,12 @@ async function httpSSE(url, opts, onFrame, timeoutMs = 45000, allowLoopback = fa
         if (parsed) onFrame(parsed);
       }
     }
-    return { ok: true, status: r.status };
+    // Une réponse interrompue en cours de flux n'est pas une fin normale.
+    if (res.body.complete === false) return netError(new Error('flux interrompu'));
   } catch (e) {
-    const aborted = opts.signal && opts.signal.aborted;
-    return { ok: false, error: aborted ? 'Génération interrompue.' : 'Erreur réseau : ' + (e.name === 'AbortError' ? 'timeout' : e.message) };
-  } finally {
-    clearTimeout(t);
-    if (opts.signal) opts.signal.removeEventListener('abort', onAbort);
+    return netError(e);
   }
+  return { ok: true, status: res.status };
 }
 
 // ---------- Outils : normalisation ----------

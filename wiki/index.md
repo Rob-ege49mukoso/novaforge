@@ -11,6 +11,7 @@ updated_at: 2026-11-14T11:25Z
 - [NovaForge](project/novaforge.md) — fiche produit, modules, principes, plan v1.4
 - [Boucle d'outils et streaming](project/entity-boucle-outils-streaming.md) — boucle d'outils, moteur NovaCore, protocole SSE (v1.4 étape 1)
 - [Passerelle de paiement automatisée](project/entity-passerelle-paiement.md) — adaptateurs, test de connexion réel, webhook signé, idempotence (v1.4 étape 2)
+- [Épinglage d'IP (anti-DNS-rebinding)](project/entity-epinglage-ip.md) — résolution unique, adresse validée, TLS conservé, redirections re-validées (v1.4 étape 3)
 - [Vue d'ensemble](overview.md) — synthèse du projet et de l'état d'avancement
 
 ## Journal
