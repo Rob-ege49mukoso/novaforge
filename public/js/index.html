@@ -11,6 +11,14 @@
 <body>
 <div id="root"></div>
 <div id="toasts"></div>
+<!-- Annonces pour les lecteurs d'écran : frappe en cours, arrêt du flux, fin de réponse. -->
+<div id="live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<noscript>
+  <div style="max-width:520px;margin:60px auto;padding:22px;border:1px solid rgba(125,145,255,.2);border-radius:16px;font:15px/1.6 system-ui,sans-serif">
+    <h1 style="font-size:20px;margin-bottom:10px">NovaForge</h1>
+    <p>Cette plateforme nécessite JavaScript pour fonctionner (assistant en streaming, aperçu des projets, automatisations).</p>
+  </div>
+</noscript>
 <script src="/js/app.js"></script>
 </body>
 </html>

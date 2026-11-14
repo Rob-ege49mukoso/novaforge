@@ -143,6 +143,25 @@ pre.code{background:#0a0f1f;border:1px solid var(--bord);border-radius:12px;padd
 .chat .inbar{display:flex;gap:10px}
 .chat .inbar input{flex:1}
 
+/* Streaming — réponse incrémentale, indicateur de saisie, arrêt du flux */
+@keyframes typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+.typing{display:inline-flex;gap:4px;align-items:center;height:12px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--acc);animation:typing 1.1s infinite ease-in-out}
+.typing i:nth-child(2){animation-delay:.18s}
+.typing i:nth-child(3){animation-delay:.36s}
+.msg.streaming{border-color:var(--bord2)}
+.stream-status{display:flex;align-items:center;gap:9px;color:var(--mut);font-size:12.5px;margin-bottom:7px}
+.stream-status.off{display:none}
+.stream-text{white-space:pre-wrap;word-break:break-word}
+.stream-tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.stream-tools:empty{display:none}
+.stream-tools .chip{font-size:11.5px}
+.stream-error{color:var(--err);font-size:13px;margin-top:8px}
+.stream-stopped{color:var(--mut);font-size:12.5px;margin-top:8px}
+.btn.stop{border-color:rgba(248,113,113,.45);color:#ffb0b0}
+.btn.stop:hover{box-shadow:none;border-color:rgba(248,113,113,.75)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
 /* Studio */
 .studio-tabs{display:flex;gap:10px;margin-bottom:18px}
 .studio-tab{flex:1;max-width:280px;text-align:left;padding:16px 18px;border-radius:14px;border:1px solid var(--bord);background:var(--card);cursor:pointer;transition:all .2s}

@@ -12,6 +12,7 @@ const db = require('./lib/db');
 const A = require('./lib/auth');
 const U = require('./lib/util');
 const LLM = require('./lib/llm');
+const NOVACORE = require('./lib/novacore');
 const MCP = require('./lib/mcp');
 const AUTO = require('./lib/automation');
 const GEN = require('./generator');
@@ -236,58 +237,9 @@ function saveUploadedFile(user, file) {
 
 
 // ---------- Moteur assistant local (déterministe) ----------
-function localAssistant(user, message) {
-  const t = String(message || '').trim();
-  const lower = t.toLowerCase();
-  const projects = GEN.projects().where((p) => p.owner_id === user.id);
-  const actions = [];
-  let reply = '';
-
-  const creationRe = /(cr[eé]er?|creer|create|d[eé]velopper|d[eé]veloppe|construis|fais-moi|je veux|j'aimerais|build)/i;
-  const typeWord = lower.includes('agent') || /chatbot|assistant ia/i.test(lower) ? 'agent'
-    : /\bapi\b|rest/i.test(lower) ? 'api' : /application|app|site|plateforme|outil|syst|dashboard|tableau/i.test(lower) ? 'app' : null;
-
-  if (creationRe.test(lower) || (typeWord && /(cr[ée]er|creer|create|developpe|développe|fais)/i.test(lower))) {
-    const type = typeWord || 'app';
-    const vague = t.replace(creationRe.source, '').replace(typeWord || '', '').trim().length < 4;
-    if (vague) {
-      reply = 'Avec plaisir ! Pour construire votre projet, précisez un peu le sujet. Par exemple :\n\n• « Crée-moi une application de livraison »\n• « Je veux une API pour gérer ma boutique »\n• « Crée un agent IA pour mon service client »\n\nOu choisissez un type :';
-      actions.push({ type: 'suggest', options: ['app', 'api', 'agent'] });
-    } else {
-      reply = `Je vais construire votre **${type === 'api' ? 'API' : type === 'agent' ? 'agent IA' : 'application'}** à partir de votre description.\n\n**Plan :**\n1. Compréhension de la demande\n2. Identification des fonctionnalités\n3. Construction réelle du projet\n4. Tests automatiques\n5. Aperçu fonctionnel\n\nConfirmez la création :`;
-      actions.push({ type: 'create', kind: type, description: t, label: `🚀 Créer (projet ${type})` });
-    }
-  } else if (/liste|vois|montre/.test(lower) && /projet/.test(lower)) {
-    if (projects.length === 0) reply = 'Vous n’avez encore aucun projet. Décrivez-moi ce que vous voulez créer (application, API ou agent IA) et je le construis.';
-    else {
-      reply = 'Vos projets :\n\n' + projects.slice(0, 8).map((p) => `• **${p.name}** (${p.type}) — ${p.status}`).join('\n');
-      actions.push({ type: 'goto', to: '#/projects', label: '📁 Ouvrir la page Projets' });
-    }
-  } else if (/(publie|publier|dépublie|depublier)/i.test(lower) && /projet/.test(lower)) {
-    const p = projects.find((x) => x.name.toLowerCase().replace(/[^a-z0-9]+/g, '').includes(lower.replace(/[^a-z0-9]+/g, '')) || (lower.includes(x.name.toLowerCase().slice(0, 8)) && x.name.toLowerCase().slice(0, 8).length > 3));
-    if (!p) reply = 'Je ne trouve pas ce projet par son nom. Dites-moi lequel (ex. : « publie Livraison »).';
-    else {
-      const doPublish = !/dépublie|depublier/i.test(lower);
-      reply = `Je vais ${doPublish ? 'publier' : 'dépublier'} **${p.name}**.`;
-      actions.push({ type: 'project_action', project_id: p.id, action: doPublish ? 'publish' : 'unpublish', label: doPublish ? '✅ Publier ' + p.name : '↩ Dépublier ' + p.name });
-    }
-  } else if (/(supprime|supprimer)/i.test(lower) && /projet/.test(lower)) {
-    const p = projects.find((x) => x.name.toLowerCase().includes(lower.replace(/[^a-z0-9]+/g, '').slice(0, 10)) && lower.replace(/[^a-z0-9]+/g, '').length > 4);
-    if (!p) reply = 'Je ne trouve pas ce projet par son nom. Indiquez le nom exact (ex. : « supprime Mon API »).';
-    else {
-      reply = `⚠️ Supprimer **${p.name}** est définitif. Confirmez :`;
-      actions.push({ type: 'project_action', project_id: p.id, action: 'delete', label: '🗑 Confirmer la suppression' });
-    }
-  } else if (/automatis|automate|planifi|tous les jours|demain à|dans \d+ min/i.test(lower)) {
-    reply = 'Je peux créer cette automatisation sur la machine où NovaForge est installée (tâche en ligne ou hors ligne). Elle sera exécutée après votre confirmation si elle lance une commande.';
-    actions.push({ type: 'create_automation', description: t, label: '🤖 Créer l’automatisation' });
-  } else if (/aide|help|que peux-tu|capacit|comment fonctionnes/i.test(lower)) {
-    reply = 'Je suis **Nova**, l’assistant de NovaForge. Ce que je peux faire :\n\n• 🏗 **Créer** des applications, des API et des agents IA par simple description\n• 📁 Gérer vos projets (lister, publier, supprimer, modifier)\n• 🤖 Créer des **automatisations** sur l’appareil hôte (requêtes, fichiers, commandes, planning)\n• 💬 Discuter et vous accompagner\n\nEssayez : « Crée-moi une application de gestion financière ».';
-  } else {
-    reply = 'Je peux construire des projets pour vous (applications, API, agents IA), les gérer, et créer des automatisations. Décrivez votre besoin en langage naturel — par exemple « Crée-moi une application de livraison » — ou tapez « aide ».';
-  }
-  return { reply, actions };
-}
+// Le moteur NovaCore (server/lib/novacore.js) assure le fonctionnement de base
+// SANS fournisseur IA : il est partagé par l’assistant conversationnel et par
+// les agents, et produit des appels d’outils au format normalisé.
 
 // ---------- Outils des agents ----------
 function safeCalc(expr) {
@@ -300,7 +252,7 @@ function safeCalc(expr) {
   } catch { return { error: 'Erreur de calcul.' }; }
 }
 
-async function runAgentTool(user, agent, name, args) {
+async function runAgentTool(user, name, args) {
   if (name === 'calculator') return safeCalc((args || {}).expression);
   if (name === 'datetime') {
     const d = new Date();
@@ -313,7 +265,7 @@ async function runAgentTool(user, agent, name, args) {
       const safeUrl = await validateOutboundUrl(url, { requireHttps: process.env.NODE_ENV === 'production' });
       const r = await fetch(safeUrl, { signal: AbortSignal.timeout(15000), redirect: 'error' });
       const text = await readLimited(r, 1024 * 1024);
-      return { status: r.status, extrait: text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 800) };
+      return { status: r.status, url: String(url), extrait: text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 800) };
     } catch (e) { return { error: e.message }; }
   }
   const m = name.match(/^mcp_(\d+)_(.+)$/);
@@ -327,73 +279,75 @@ async function runAgentTool(user, agent, name, args) {
   return { error: 'Outil inconnu.' };
 }
 
-async function agentChat(user, project, message) {
+/** Catalogue d'outils proposé au modèle : outils standard + serveurs MCP autorisés de l'utilisateur. */
+function buildTools(user) {
+  const tools = NOVACORE.TOOLS.map((t) => ({ ...t }));
+  const myServers = MCP.servers().where((s) => s.user_id === user.id && s.enabled !== false && s.status === 'active');
+  for (const s of myServers) for (const t of s.tools || []) if (t.allowed !== false)
+    tools.push({ type: 'function', function: { name: `mcp_${s.id}_${t.name}`, description: `[MCP ${s.name}] ${t.description || t.name}`, parameters: t.input_schema || { type: 'object', properties: {} } } });
+  return tools;
+}
+
+/** Exécuteur d'outils : signature attendue par la boucle d'outils (nom, args, ctx). */
+const toolRunner = (user) => async (name, args) => runAgentTool(user, name, args);
+
+/**
+ * Conversation avec un agent : boucle d'outils complète
+ * (tool_calls → exécution → renvoi du résultat dans la conversation → réponse finale).
+ * Le fournisseur IA actif est utilisé s'il existe ; sinon (ou en cas d'échec),
+ * le moteur local NovaCore prend le relais avec exactement la même boucle.
+ */
+async function agentChat(user, project, message, opts = {}) {
   let cfg = null;
   try { cfg = JSON.parse(GEN.readCurrent(project.id)['agent.json']); } catch { /* noop */ }
-  if (!cfg) return { reply: 'Configuration agent introuvable.', tools_used: [] };
+  if (!cfg) return { reply: 'Configuration agent introuvable.', tools_used: [], provider: false };
   const history = (project.agent_history || []).slice(-8);
-  const entries = [{ role: 'user', content: message }];
-  const toolsUsed = [];
+  const messages = [
+    { role: 'system', content: cfg.system_prompt || '' },
+    ...history.map((h) => ({ role: h.role, content: h.content })),
+    { role: 'user', content: message },
+  ];
+  const tools = buildTools(user);
+  const executeTool = toolRunner(user);
+  const state = { emitted: false };
+  const emit = (ev) => {
+    if (ev && ev.type === 'delta') state.emitted = true;
+    if (typeof opts.onEvent === 'function') opts.onEvent(ev);
+  };
 
-  const providers = LLM.listProviders().filter((p) => p.enabled && p.status === 'active');
-  if (providers.length > 0) {
-    const tools = [{ type: 'function', function: { name: 'calculator', description: 'Calcule une expression mathématique', parameters: { type: 'object', properties: { expression: { type: 'string' } }, required: ['expression'] } } },
-    { type: 'function', function: { name: 'datetime', description: 'Date et heure actuelles', parameters: { type: 'object', properties: {} } } },
-    { type: 'function', function: { name: 'web_fetch', description: 'Récupère le contenu d’une URL', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } }];
-    const myServers = MCP.servers().where((s) => s.user_id === user.id && s.enabled !== false && s.status === 'active');
-    for (const s of myServers) for (const t of s.tools || []) if (t.allowed !== false)
-      tools.push({ type: 'function', function: { name: `mcp_${s.id}_${t.name}`, description: `[MCP ${s.name}] ${t.description || t.name}`, parameters: t.input_schema || { type: 'object', properties: {} } } });
+  const hasProvider = LLM.listProviders().some((p) => p.enabled && p.status === 'active');
+  let res = null;
+  let provider = false;
+  if (hasProvider) {
+    res = opts.stream
+      ? await LLM.chatStreamWithFallback({ user, messages, purpose: 'agent:' + project.name, tools, executeTool, onEvent: emit, signal: opts.signal })
+      : await LLM.chatWithFallback({ user, messages, purpose: 'agent:' + project.name, tools, executeTool, onEvent: emit, signal: opts.signal });
+    provider = !!(res && res.ok);
+  }
 
-    const messages = [{ role: 'system', content: cfg.system_prompt }, ...history.map((h) => ({ role: h.role, content: h.content })), { role: 'user', content: message }];
-    let cur = messages;
-    let finalContent = null;
-    for (let round = 0; round < 4; round++) {
-      const res = await LLM.chatWithFallback({ user, messages: cur, purpose: 'agent:' + project.name, tools });
-      if (!res.ok) break;
-      if (res.tool_calls && res.tool_calls.length) {
-        cur = [...cur, { role: 'assistant', content: res.content || null, tool_calls: res.tool_calls }];
-        for (const tc of res.tool_calls) {
-          let args = {};
-          try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* noop */ }
-          const out = await runAgentTool(user, cfg, tc.function.name, args);
-          toolsUsed.push({ tool: tc.function.name, args, result: typeof out === 'string' ? out.slice(0, 300) : out });
-          cur.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out).slice(0, 2000) });
-        }
-        continue;
-      }
-      finalContent = res.content;
-      break;
+  if (!res || !res.ok) {
+    if (state.emitted) {
+      // Du texte est déjà parti vers le client : impossible de repartir sur NovaCore.
+      return { reply: '', tools_used: [], provider: false, error: (res && res.error) || 'Le fournisseur IA a interrompu la réponse.' };
     }
-    if (finalContent != null) {
-      project.agent_history = [...history, { role: 'user', content: message }, { role: 'assistant', content: finalContent }].slice(-20);
-      GEN.projects().update(project.id, { agent_history: project.agent_history });
-      return { reply: finalContent, tools_used: toolsUsed, provider: true };
-    }
+    // Moteur local NovaCore — même boucle d'outils, aucun fournisseur IA requis.
+    res = await LLM.runToolLoop({
+      call: async (msgs) => {
+        const turn = NOVACORE.agentTurn(msgs, { persona: cfg.persona, name: cfg.name });
+        if (turn.content) emit({ type: 'delta', text: turn.content });
+        return { ok: true, content: turn.content, tool_calls: turn.tool_calls && turn.tool_calls.length ? turn.tool_calls : null };
+      },
+      messages, tools, executeTool, onEvent: emit, signal: opts.signal,
+    });
+    provider = false;
+    if (!res.ok) return { reply: '', tools_used: res.tools_used || res.trace || [], provider: false, error: res.error };
   }
-  // Moteur local
-  const lower = message.toLowerCase();
-  let local = null;
-  if (/(calcul|calcule|résultat|resultat|combien fait)/.test(lower)) {
-    const e = message.match(/[-+*/().\d\s,^%]+/);
-    if (e) local = 'Résultat : **' + JSON.stringify(safeCalc(e[0])) + '**';
-  }
-  if (!local && /(date|heure|jour)/.test(lower)) local = 'Actuellement : ' + new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' — ' + new Date().toLocaleTimeString('fr-FR');
-  if (!local) {
-    const m = message.match(/https?:\/\/[^\s]+/i);
-    if (m) {
-      try {
-        const safeUrl = await validateOutboundUrl(m[0], { requireHttps: process.env.NODE_ENV === 'production' });
-        const r = await fetch(safeUrl, { signal: AbortSignal.timeout(12000), redirect: 'error' });
-        const text = await readLimited(r, 1024 * 1024);
-        local = `Contenu de ${m[0]} (HTTP ${r.status}) : ${text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 500)}`;
-        toolsUsed.push({ tool: 'web_fetch', args: { url: m[0] } });
-      } catch (e) { local = 'Impossible de récupérer l’URL : ' + e.message; }
-    }
-  }
-  if (!local) local = (cfg.persona ? cfg.persona + '. ' : '') + `Bonjour ! Je suis **${cfg.name}**. Décrivez votre demande et je m’en occupe. (Configurez un fournisseur IA dans « Orchestration IA » pour des réponses entièrement naturelles et l’usage d’outils avancés.)`;
-  project.agent_history = [...history, { role: 'user', content: message }, { role: 'assistant', content: local }].slice(-20);
+
+  const reply = res.content || '';
+  const toolsUsed = res.tools_used || res.trace || [];
+  project.agent_history = [...history, { role: 'user', content: message }, { role: 'assistant', content: reply }].slice(-20);
   GEN.projects().update(project.id, { agent_history: project.agent_history });
-  return { reply: local, tools_used: toolsUsed, provider: false };
+  return { reply, tools_used: toolsUsed, provider };
 }
 
 // ---------- HTML d'aperçu agent ----------
@@ -416,18 +370,40 @@ button{background:linear-gradient(135deg,#4f7cff,#8b5cf6);border:none;color:#fff
 </style></head><body>
 <header><div class="dot"></div><div><h1>${String(cfg.name || project.name).replace(/</g, '&lt;')}</h1><div class="sub">Agent IA · NovaForge</div></div></header>
 <div id="chat"><div class="m ai">Bonjour, je suis ${String(cfg.name || 'l’agent').replace(/</g, '&lt;')} 👋 Comment puis-je vous aider ?</div></div>
-<form onsubmit="send(event)"><input id="i" placeholder="Écrivez votre message…" autocomplete="off"><button>Envoyer</button></form>
+<form onsubmit="send(event)"><input id="i" placeholder="Écrivez votre message…" autocomplete="off"><button id="go">Envoyer</button><button id="stop" type="button" hidden>⏹ Arrêter</button></form>
 <script>
 const PID=${project.id};
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function md(s){return esc(s).replace(/\\*\\*(.+?)\\*\\*/g,'<b>$1</b>')}
+let ctrl=null;
+function setStop(on){document.getElementById('stop').hidden=!on;document.getElementById('go').disabled=on}
+function parseFrame(frame){let ev='';const data=[];for(const line of frame.split('\\n')){if(line.startsWith('event:'))ev=line.slice(6).trim();else if(line.startsWith('data:'))data.push(line.slice(5).replace(/^ /,''))}
+ if(!data.length)return null;const raw=data.join('\\n');let d=null;try{d=JSON.parse(raw)}catch{d=raw}return{event:ev||'message',data:d}}
 async function send(e){e.preventDefault();const i=document.getElementById('i');const v=i.value.trim();if(!v)return;i.value='';
  const chat=document.getElementById('chat');
  chat.insertAdjacentHTML('beforeend','<div class="m user">'+esc(v)+'</div>');
- const r=await fetch('/api/v1/projects/'+PID+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:v})});
- const d=await r.json();
- const tools=d.tools_used&&d.tools_used.length?'<small>Outils : '+esc(d.tools_used.map(t=>t.tool).join(', '))+'</small>':'';
- chat.insertAdjacentHTML('beforeend','<div class="m ai">'+esc(d.reply||d.error||'…')+tools+'</div>');
- chat.scrollTop=chat.scrollHeight;}
+ const box=document.createElement('div');box.className='m ai';
+ box.innerHTML='<span class="spin"></span>';
+ chat.appendChild(box);chat.scrollTop=chat.scrollHeight;
+ ctrl=new AbortController();setStop(true);
+ try{
+  const r=await fetch('/api/v1/projects/'+PID+'/chat',{method:'POST',headers:{'Content-Type':'application/json','Accept':'text/event-stream'},body:JSON.stringify({message:v,stream:true}),signal:ctrl.signal});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const reader=r.body.getReader();const dec=new TextDecoder();let buf='';let txt='';const tools=[];
+  for(;;){const{done,value}=await reader.read();if(done)break;
+   buf+=dec.decode(value,{stream:true});
+   let idx;
+   while((idx=buf.indexOf('\\n\\n'))!==-1){const frame=buf.slice(0,idx);buf=buf.slice(idx+2);
+    const fr=parseFrame(frame);if(!fr)continue;const d=fr.data||{};
+    if(fr.event==='delta'){txt+=d.text||'';box.innerHTML=md(txt);chat.scrollTop=chat.scrollHeight}
+    else if(fr.event==='round'){txt='';box.innerHTML=''}
+    else if(fr.event==='tool'){tools.push(d.tool)}
+    else if(fr.event==='done'){txt=d.reply||'';box.innerHTML=md(txt);if(tools.length){const s=document.createElement('small');s.textContent='Outils : '+tools.join(', ');box.appendChild(s)}}
+    else if(fr.event==='error'){const s=document.createElement('div');s.textContent='⚠️ '+(d.error||'Erreur');box.appendChild(s)}
+   }}
+ }catch(err){if(err.name==='AbortError'){const s=document.createElement('div');s.textContent='⏹ Génération arrêtée.';box.appendChild(s)}else{const s=document.createElement('div');s.textContent='⚠️ '+err.message;box.appendChild(s)}}
+ finally{ctrl=null;setStop(false);chat.scrollTop=chat.scrollHeight}}
+document.getElementById('stop').onclick=()=>{if(ctrl){ctrl.abort();ctrl=null}};
 </script></body></html>`;
 }
 
@@ -669,8 +645,27 @@ route('POST', '/api/v1/projects/:id/chat', async (r) => {
   if (!p || p.type !== 'agent') return { code: 404, body: { error: 'Agent introuvable.' } };
   const message = U.safeStr(r.body.message, 4000);
   if (!message) return { code: 400, body: { error: 'Message vide.' } };
-  const res = await agentChat(r.user, p, message);
-  return { body: res };
+
+  // ---- Mode JSON classique (comportement historique inchangé) ----
+  if (!wantsStream(r.req, r.body, r.query)) {
+    const res = await agentChat(r.user, p, message);
+    return { body: res };
+  }
+
+  // ---- Mode streaming SSE ----
+  const stream = openSse(r);
+  const onEvent = sseEventWriter(r.res);
+  try {
+    sse(r.res, 'meta', { project_id: p.id, mode: 'stream' });
+    const res = await agentChat(r.user, p, message, { stream: true, onEvent, signal: stream.ctrl.signal });
+    if (res.error) sse(r.res, 'error', { error: res.error });
+    else sse(r.res, 'done', { reply: res.reply, tools_used: res.tools_used || [], provider: !!res.provider });
+  } catch (e) {
+    sse(r.res, 'error', { error: e.message || 'Erreur du flux.' });
+  } finally {
+    stream.close();
+  }
+  return r.res;
 });
 
 route('POST', '/api/v1/projects/:id', async (r) => {
@@ -778,7 +773,87 @@ function buildFilesFor(p, understood, description) {
   return GEN.buildFiles({ type: p.type, name: understood.name, domain: understood.domain, features: understood.features, description });
 }
 
+// ----- Streaming SSE -----
+// Le mode JSON historique reste la référence : le streaming n'est activé que si
+// le client le demande (en-tête Accept: text/event-stream ou paramètre stream).
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream; charset=utf-8',
+  'Cache-Control': 'no-cache, no-transform',
+  'Connection': 'keep-alive',
+  'X-Accel-Buffering': 'no',
+};
+
+function wantsStream(req, body, query) {
+  const accept = String((req && req.headers && req.headers.accept) || '').toLowerCase();
+  if (accept.includes('text/event-stream')) return true;
+  if (query && (query.stream === '1' || query.stream === 'true')) return true;
+  if (body && (body.stream === true || body.stream === '1' || body.stream === 'true')) return true;
+  return false;
+}
+
+function sse(res, event, data) {
+  if (!res || res.writableEnded || res.destroyed) return;
+  try {
+    res.write('event: ' + event + '\n');
+    res.write('data: ' + JSON.stringify(data === undefined ? null : data) + '\n\n');
+  } catch { /* client parti en cours de route */ }
+}
+
+/**
+ * Diffuse un texte local par fragments : le moteur NovaCore est déterministe
+ * (aucun jeton amont à attendre), on relit donc la réponse par morceaux pour
+ * offrir la même sensation de saisie progressive.
+ */
+async function sseText(res, text, chunkSize = 42) {
+  const s = String(text == null ? '' : text);
+  if (!s) return;
+  for (let i = 0; i < s.length; i += chunkSize) {
+    if (!res || res.writableEnded || res.destroyed) return;
+    sse(res, 'delta', { text: s.slice(i, i + chunkSize) });
+    await U.sleep(14);
+  }
+}
+
+/** Traduit les événements de la boucle d'outils en trames SSE. */
+function sseEventWriter(res) {
+  return (ev) => {
+    if (!ev) return;
+    if (ev.type === 'delta') sse(res, 'delta', { text: ev.text });
+    else if (ev.type === 'round') sse(res, 'round', { round: ev.round });
+    else if (ev.type === 'tool_start') sse(res, 'tool', { round: ev.round, tool: ev.tool, args: ev.args, status: 'start' });
+    else if (ev.type === 'tool_end') sse(res, 'tool_result', { round: ev.round, tool: ev.tool, result: ev.result });
+  };
+}
+
+/** Ouvre un flux SSE et gère l'annulation côté client (bouton « Arrêter »). */
+function openSse(r) {
+  const res = r.res;
+  res.writeHead(200, SSE_HEADERS);
+  if (res.flushHeaders) res.flushHeaders();
+  const ctrl = new AbortController();
+  const onClose = () => { if (!res.writableEnded) ctrl.abort(); };
+  r.req.on('close', onClose);
+  res.on('close', onClose);
+  return {
+    ctrl,
+    close() {
+      r.req.removeListener('close', onClose);
+      res.removeListener('close', onClose);
+      if (!res.writableEnded) res.end();
+    },
+  };
+}
+
 // ----- Assistant -----
+/** Historique transmis au modèle pour l'assistant. */
+function assistantMessages(user, conv, message) {
+  return [
+    { role: 'system', content: 'Tu es Nova, l’assistant de NovaForge (plateforme de création d’applications, d’API et d’agents IA). Réponds en français, de façon concise et chaleureuse. Contexte : l’utilisateur a ' + GEN.projects().where((p) => p.owner_id === user.id).length + ' projet(s).' },
+    ...conv.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: message },
+  ];
+}
+
 route('POST', '/api/v1/assistant/chat', async (r) => {
   const u = r.user;
   const message = U.safeStr(r.body.message, 4000);
@@ -788,23 +863,67 @@ route('POST', '/api/v1/assistant/chat', async (r) => {
   if (!conv) {
     conv = convs.insert({ user_id: u.id, title: message.slice(0, 60), messages: [] });
   }
-  const local = localAssistant(u, message);
+  const local = NOVACORE.localAssistant(u, message);
+  const hasProvider = LLM.listProviders().some((p) => p.enabled && p.status === 'active');
+  const useProvider = hasProvider && local.actions.length === 0;
+
+  // ---- Mode JSON classique (comportement historique inchangé) ----
+  if (!wantsStream(r.req, r.body, r.query)) {
+    let reply = local.reply;
+    let provider = false;
+    let toolsUsed = [];
+    if (useProvider) {
+      const res = await LLM.chatWithFallback({
+        user: u, messages: assistantMessages(u, conv, message), purpose: 'assistant',
+        tools: buildTools(u), executeTool: toolRunner(u),
+      });
+      if (res.ok) { reply = res.content; provider = true; toolsUsed = res.tools_used || []; }
+    }
+    conv.messages = [...conv.messages, { role: 'user', content: message }, { role: 'assistant', content: reply }].slice(-40);
+    convs.update(conv.id, { messages: conv.messages, title: conv.messages[0].content.slice(0, 60) });
+    logAudit(u, 'assistant.chat', '', { tools: toolsUsed.length });
+    return { body: { reply, actions: local.actions, conversation_id: conv.id, provider, tools_used: toolsUsed } };
+  }
+
+  // ---- Mode streaming SSE ----
+  const stream = openSse(r);
+  const onEvent = sseEventWriter(r.res);
   let reply = local.reply;
   let provider = false;
-  const providers = LLM.listProviders().filter((p) => p.enabled && p.status === 'active');
-  if (providers.length > 0 && local.actions.length === 0) {
-    const msgs = [
-      { role: 'system', content: 'Tu es Nova, l’assistant de NovaForge (plateforme de création d’applications, d’API et d’agents IA). Réponds en français, de façon concise et chaleureuse. Contexte : l’utilisateur a ' + GEN.projects().where((p) => p.owner_id === u.id).length + ' projet(s).' },
-      ...conv.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: message },
-    ];
-    const res = await LLM.chatWithFallback({ user: u, messages: msgs, purpose: 'assistant' });
-    if (res.ok) { reply = res.content; provider = true; }
+  let toolsUsed = [];
+  let emitted = false;
+  const track = (ev) => { if (ev && ev.type === 'delta') emitted = true; onEvent(ev); };
+  try {
+    sse(r.res, 'meta', { conversation_id: conv.id, mode: 'stream' });
+    if (useProvider) {
+      const res = await LLM.chatStreamWithFallback({
+        user: u, messages: assistantMessages(u, conv, message), purpose: 'assistant',
+        tools: buildTools(u), executeTool: toolRunner(u), onEvent: track, signal: stream.ctrl.signal,
+      });
+      if (res.ok) {
+        reply = res.content; provider = true; toolsUsed = res.tools_used || [];
+      } else if (emitted) {
+        sse(r.res, 'error', { error: res.error || 'Le fournisseur IA a interrompu la réponse.' });
+      } else {
+        // Repli NovaCore : réponse locale déterministe, diffusée par fragments.
+        reply = local.reply;
+        sse(r.res, 'round', { round: 1 });
+        await sseText(r.res, local.reply);
+      }
+    } else {
+      sse(r.res, 'round', { round: 1 });
+      await sseText(r.res, local.reply);
+    }
+    conv.messages = [...conv.messages, { role: 'user', content: message }, { role: 'assistant', content: reply }].slice(-40);
+    convs.update(conv.id, { messages: conv.messages, title: conv.messages[0].content.slice(0, 60) });
+    logAudit(u, 'assistant.chat', '', { stream: true, provider, tools: toolsUsed.length });
+    sse(r.res, 'done', { reply, actions: local.actions, conversation_id: conv.id, provider, tools_used: toolsUsed });
+  } catch (e) {
+    sse(r.res, 'error', { error: e.message || 'Erreur du flux.' });
+  } finally {
+    stream.close();
   }
-  conv.messages = [...conv.messages, { role: 'user', content: message }, { role: 'assistant', content: reply }].slice(-40);
-  convs.update(conv.id, { messages: conv.messages, title: conv.messages[0].content.slice(0, 60) });
-  logAudit(u, 'assistant.chat', '', {});
-  return { body: { reply, actions: local.actions, conversation_id: conv.id, provider } };
+  return r.res;
 });
 
 route('GET', '/api/v1/assistant/conversations', (r) => {
@@ -1431,3 +1550,6 @@ db.ready().catch((e) => {
     AUTO.startScheduler();
   });
 });
+
+// Exports pour les tests automatisés (le serveur reste le point d'entrée principal).
+module.exports = { server, routes, VERSION };

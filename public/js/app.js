@@ -44,6 +44,168 @@ window.NFX = (function () {
     return data;
   }
 
+  // ---------- Streaming SSE ----------
+  /** Découpe une trame SSE brute en {event, data}. */
+  function parseSseFrame(frame) {
+    let event = '';
+    const data = [];
+    for (const line of String(frame).split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+    }
+    if (!data.length) return null;
+    const raw = data.join('\n');
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+    return { event: event || 'message', data: parsed };
+  }
+
+  /** Lit un flux SSE et appelle onEvent(event, data) pour chaque trame reçue. */
+  async function readSse(res, onEvent) {
+    if (!res.body) throw new Error('Réponse sans flux de données.');
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const frame = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const ev = parseSseFrame(frame);
+        if (ev) onEvent(ev.event, ev.data);
+      }
+    }
+  }
+
+  /** Active/désactive les boutons d'arrêt et d'envoi de tous les panneaux de chat. */
+  function setStreaming(on) {
+    document.querySelectorAll('[data-stream-stop]').forEach((b) => { b.hidden = !on; });
+    document.querySelectorAll('[data-stream-send]').forEach((b) => { b.disabled = on; });
+  }
+
+  /**
+   * Bulle de réponse en cours : indicateur de saisie, texte incrémental,
+   * trace des outils utilisés.
+   */
+  function createStreamBubble(container) {
+    const box = document.createElement('div');
+    box.className = 'msg a streaming';
+    const status = document.createElement('div');
+    status.className = 'stream-status';
+    status.innerHTML = '<span class="typing" aria-hidden="true"><i></i><i></i><i></i></span><span>Réponse en cours…</span>';
+    const text = document.createElement('div');
+    text.className = 'stream-text';
+    const tools = document.createElement('div');
+    tools.className = 'stream-tools';
+    box.append(status, text, tools);
+    container.appendChild(box);
+    let live = false;
+    let raw = '';
+    let painted = 0;
+    // Rendu Markdown rafraîchi au plus toutes les 60 ms : la frappe reste fluide.
+    const paint = (force) => {
+      const now = Date.now();
+      if (!force && now - painted < 60) return;
+      painted = now;
+      text.innerHTML = md(raw);
+    };
+    return {
+      box, text, tools,
+      get raw() { return raw; },
+      delta(t) {
+        if (!live) { live = true; status.classList.add('off'); }
+        raw += t;
+        paint(false);
+        box.scrollIntoView({ block: 'nearest' });
+      },
+      reset() { raw = ''; text.innerHTML = ''; },
+      tool(name, phase) {
+        let chip = tools.querySelector('[data-tool="' + CSS.escape(name) + '"]');
+        if (!chip) {
+          chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.dataset.tool = name;
+          tools.appendChild(chip);
+        }
+        chip.textContent = phase === 'end' ? '🔧 ' + name : '⏳ ' + name + '…';
+      },
+      setText(t) {
+        if (t != null) raw = String(t);
+        if (!live) { live = true; status.classList.add('off'); }
+        paint(true);
+      },
+      fail(message) {
+        status.classList.add('off');
+        const d = document.createElement('div');
+        d.className = 'stream-error';
+        d.textContent = message;
+        box.appendChild(d);
+      },
+      stop() {
+        status.classList.add('off');
+        const d = document.createElement('div');
+        d.className = 'stream-stopped';
+        d.textContent = '⏹ Génération arrêtée.';
+        box.appendChild(d);
+      },
+    };
+  }
+
+  /**
+   * Envoie un message et rend la réponse au fur et à mesure.
+   * Le flux peut être interrompu à tout moment via le bouton « Arrêter ».
+   */
+  async function sendStreamChat({ url, body, container, onDone }) {
+    const bubble = createStreamBubble(container);
+    const ctrl = new AbortController();
+    N._abort = ctrl;
+    setStreaming(true);
+    announce('Génération en cours.');
+    let reply = '';
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ ...body, stream: true }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        let msg = 'Erreur ' + res.status;
+        try { const d = await res.json(); msg = d.error || msg; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      await readSse(res, (event, data) => {
+        if (!data || typeof data !== 'object') return;
+        if (event === 'delta') { bubble.delta(data.text || ''); reply += data.text || ''; }
+        else if (event === 'round') bubble.reset();
+        else if (event === 'tool') bubble.tool(data.tool, 'start');
+        else if (event === 'tool_result') bubble.tool(data.tool, 'end');
+        else if (event === 'done') {
+          bubble.setText(data.reply != null ? data.reply : reply);
+          reply = data.reply != null ? data.reply : reply;
+          if (onDone) onDone(data, bubble);
+        } else if (event === 'error') bubble.fail(data.error || 'Erreur du flux.');
+      });
+      if (!bubble.raw) bubble.setText(reply);
+    } catch (e) {
+      if (e.name === 'AbortError') bubble.stop();
+      else bubble.fail(e.message || 'Erreur du flux.');
+    } finally {
+      N._abort = null;
+      setStreaming(false);
+      announce('Réponse terminée.');
+    }
+  }
+
+  /** Annonce vocale (lecteurs d'écran) de l'état du flux. */
+  function announce(msg) {
+    const live = $('#live');
+    if (live) live.textContent = msg;
+  }
+
   const TYPE_ICO = { app: '🌐', api: '🔌', agent: '🤖', fullstack: '🧱', mobile: '📱' };
   const TYPE_LBL = { app: 'Application web', api: 'API', agent: 'Agent IA', fullstack: 'Full stack', mobile: 'Mobile (APK)' };
   const ENGINE_LBL = (p) => {
@@ -138,6 +300,7 @@ window.NFX = (function () {
       try {
         const d = await api('setup', { method: 'POST', body: { email: fS.email.value, password: fS.password.value } });
         N.user = d.user;
+        N.status = { initialized: true }; // sinon l'écran d'initialisation reste affiché
         toast('Plateforme initialisée — vous êtes Super Admin.', 'ok');
         location.hash = '#/dashboard';
         render();
@@ -235,7 +398,7 @@ window.NFX = (function () {
         </div>
         <div class="card" style="padding:0;overflow:hidden"><div class="chat" style="height:calc(100vh - 220px)">
           <div class="msgs" id="msgs"><div class="msg a">Bonjour 👋 Je suis <b>Nova</b>. Décrivez ce que vous voulez créer — par exemple « Crée-moi une application de livraison » — et je m’en occupe de A à Z (construction, tests, aperçu).</div></div>
-          <div class="inbar"><input class="inp" id="chatIn" placeholder="Écrivez votre demande…" autocomplete="off"><button class="btn" id="chatSend">Envoyer</button></div>
+          <div class="inbar"><input class="inp" id="chatIn" placeholder="Écrivez votre demande…" autocomplete="off"><button class="btn" id="chatSend" data-stream-send>Envoyer</button><button class="btn ghost stop" id="chatStop" data-stream-stop hidden>⏹ Arrêter</button></div>
         </div></div>
       </div>`);
   }
@@ -247,21 +410,23 @@ window.NFX = (function () {
     inp.value = '';
     const msgs = $('#msgs');
     msgs.insertAdjacentHTML('beforeend', `<div class="msg u">${esc(v)}</div>`);
-    const pend = document.createElement('div');
-    pend.className = 'msg a';
-    pend.innerHTML = '<span class="spin"></span>';
-    msgs.appendChild(pend);
     msgs.scrollTop = msgs.scrollHeight;
-    try {
-      const d = await api('assistant/chat', { method: 'POST', body: { message: v, conversation_id: N.conv || undefined } });
-      N.conv = d.conversation_id;
-      pend.remove();
-      const acts = (d.actions || []).map((a) => actionBtn(a)).join('');
-      msgs.insertAdjacentHTML('beforeend', `<div class="msg a">${md(d.reply)}${acts ? `<div class="acts">${acts}</div>` : ''}</div>`);
-      msgs.scrollTop = msgs.scrollHeight;
-    } catch (e) {
-      pend.innerHTML = '⚠️ ' + esc(e.message);
-    }
+    await sendStreamChat({
+      url: '/api/v1/assistant/chat',
+      body: { message: v, conversation_id: N.conv || undefined },
+      container: msgs,
+      onDone: (data, bubble) => {
+        N.conv = data.conversation_id;
+        const acts = (data.actions || []).map((a) => actionBtn(a)).join('');
+        if (acts) {
+          const box = document.createElement('div');
+          box.className = 'acts';
+          box.innerHTML = acts;
+          bubble.box.appendChild(box);
+        }
+        msgs.scrollTop = msgs.scrollHeight;
+      },
+    });
   }
 
   function actionBtn(a) {
@@ -294,6 +459,7 @@ window.NFX = (function () {
   function bindAssistant() {
     if ($('#chatSend')) $('#chatSend').onclick = sendChat;
     if ($('#chatIn')) $('#chatIn').onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
+    if ($('#chatStop')) $('#chatStop').onclick = () => { if (N._abort) N._abort.abort(); };
     document.querySelectorAll('#convList .nav-item').forEach((el) => (el.onclick = () => {
       N.conv = el.dataset.cid;
       // v1 : rechargement simple
@@ -466,6 +632,7 @@ window.NFX = (function () {
     const t = tab ? tab[1] : 'preview';
     const tabs = [['preview', 'Aperçu'], ['code', 'Code'], ['tests', 'Tests'], ['versions', 'Versions'], ['history', 'Historique']];
     if (p.type === 'api') tabs.push(['console', 'Console API']);
+    if (p.type === 'agent') tabs.push(['chat', 'Discussion']);
     return shell(esc(p.name), `
       <div class="row sec"><div class="thumb" style="width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:20px;background:${p.color || '#4f7cff'}22;border:1px solid ${p.color || '#4f7cff'}55">${TYPE_ICO[p.type]}</div>
         <div style="flex:1"><div class="row"><h3 style="font-size:17px">${esc(p.name)}</h3>${statusBadge(p.status)}</div>
@@ -485,6 +652,35 @@ window.NFX = (function () {
 
   function renderProjectTab(p, files, t) {
     const box = $('#ptab');
+    if (t === 'chat') {
+      box.innerHTML = `<div class="card" style="padding:0;overflow:hidden"><div class="chat" style="height:calc(100vh - 320px);min-height:360px">
+        <div class="msgs" id="agentMsgs"><div class="msg a">Bonjour 👋 Je suis <b>${esc(p.name)}</b>. Écrivez-moi : la réponse s’affiche au fur et à mesure de sa rédaction.</div></div>
+        <div class="inbar"><input class="inp" id="agentIn" placeholder="Écrivez votre message…" autocomplete="off"><button class="btn" id="agentSend" data-stream-send>Envoyer</button><button class="btn ghost stop" id="agentStop" data-stream-stop hidden>⏹ Arrêter</button></div>
+      </div></div>
+      <p class="hint">L’agent utilise ses outils (calcul, date, web, serveurs MCP autorisés) et répond par-dessus. Sans fournisseur IA configuré, le moteur local NovaCore prend le relais.</p>`;
+      const send = () => {
+        const inp = $('#agentIn');
+        const v = inp.value.trim();
+        if (!v) return;
+        inp.value = '';
+        const msgs = $('#agentMsgs');
+        msgs.insertAdjacentHTML('beforeend', `<div class="msg u">${esc(v)}</div>`);
+        msgs.scrollTop = msgs.scrollHeight;
+        sendStreamChat({
+          url: '/api/v1/projects/' + p.id + '/chat',
+          body: { message: v },
+          container: msgs,
+          onDone: (data, bubble) => {
+            bubble.setText(data.reply || '');
+            msgs.scrollTop = msgs.scrollHeight;
+          },
+        });
+      };
+      if ($('#agentSend')) $('#agentSend').onclick = send;
+      if ($('#agentIn')) $('#agentIn').onkeydown = (e) => { if (e.key === 'Enter') send(); };
+      if ($('#agentStop')) $('#agentStop').onclick = () => { if (N._abort) N._abort.abort(); };
+      return;
+    }
     if (t === 'preview') {
       if (p.type === 'app') box.innerHTML = `<div class="preview-box"><iframe src="/preview/${p.id}/?t=${Date.now()}" sandbox="allow-scripts allow-same-origin"></iframe></div><p class="hint">Aperçu en direct — l’application est réellement fonctionnelle (données stockées localement dans l’iframe).</p>`;
       else if (p.type === 'fullstack' || p.type === 'mobile') box.innerHTML = `<div class="preview-box"><iframe src="/run/${p.id}/?t=${Date.now()}" sandbox="allow-scripts allow-same-origin"></iframe></div><p class="hint">Aperçu en direct — l’app est connectée à son API (persistance serveur du projet, repli hors ligne). ${p.type === 'mobile' ? 'Le ZIP contient le projet Capacitor pour compiler l’APK.' : ''}</p>`;

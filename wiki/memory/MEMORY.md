@@ -1,0 +1,17 @@
+---
+title: Mémoire projet
+stage: develop
+updated_at: 2026-11-14T10:05Z
+---
+
+# Mémoire durable
+
+- Produit : NovaForge — plateforme IA universelle (FR) qui transforme une idée en application, API ou agent IA fonctionnel ; version 1.3.0, objectif v1.4 en cours. [tags: produit, version]
+- Stack imposée : Node.js 20+, zéro dépendance npm, serveur `server/app.js` + front statique `public/`, tests via `node --test`. [tags: stack, contrainte]
+- Principe produit non négociable : aucun statut connecté ou actif sans test réel réussi, aucune transaction simulée, le code produit est testé avant d'être annoncé fonctionnel. [tags: principe, honnêteté]
+- La commande shell dans l'automatisation reste désactivée tant qu'un exécuteur isolé n'existe pas ; ne pas la réactiver. [tags: sécurité, automatisation]
+- v1.4 étape 1 livrée : boucle d'outils (`runToolLoop` dans server/lib/llm.js, garde-fous anti-boucle + trace `tools_used`), moteur local NovaCore dans server/lib/novacore.js (les agents sans fournisseur IA utilisent la même boucle d'outils), streaming SSE sur les deux endpoints de chat (mode JSON historique conservé), UI avec indicateur de saisie et bouton d'arrêt. [tags: v1.4, streaming, outils]
+- Plan v1.4 en cours : (1) boucle d'outils + streaming assistant/agents — LIVRÉ, (2) passerelle de paiement automatisée Candy/Flutterwave, (3) épinglage d'IP anti-DNS-rebinding dans server/lib/network.js, (4) tests élargis + documentation. [tags: plan, develop]
+- Repo GitHub : Rob-ege49mukoso/novaforge, branche integration-novaforge, déploiement manuel. [tags: git, deploiement]
+- Task: <<DEVELOP_PLAN_APPROVED>> Run the plan above. Start executing the develop deliverables now. — Outcome: I'll start by getting oriented — reading the wiki, memory, and prior artifacts so the builder gets proper context. Let me look deeper — the wiki appears empty but the stage says ideation while a develop plan was just approved. Let Good — I now understand the product. Let me find the approved plan and check the project state. Let me try to recover the approved plan from memory before deciding how to execute. Let me ground the work in the actual codebase before dispatching the builder. I now have a complete picture of the product. Let me check the wiki conventions before writing anything. The wiki is a clean slate — I'll scaffold it and record the plan, then execute. Now dispatching the Fulls… #run-summary (productos-orchestrator, 2026-11-14) <!-- productos-run:akktho0i2qsh28c0zbvaw9e8 -->
+- Task: NovaForge v1.4, etape 1 sur 4 : boucle d outils et streaming. Le plan complet est dans wiki/project/novaforge.md, section v1.4 point 1, lis-le d abord. Dans server/lib/llm.js, callChat detecte deja les tool_calls mais chatWithFallback ne l… — Outcome: I'll start by reading the plan in the wiki and the current implementation. Now let me explore the server structure and the relevant files. Now the frontend: Now I'll write the new `server/lib/llm.js` with the tool loop and streaming: Now the NovaCore local engine module: Now updating `server/app.js`. First the imports and the local-assistant move: Now the tool catalogue and the rewritten agent chat with the tool loop: Now the SSE helpers and the two chat routes: Now the agent preview page (server-rendered) gets streaming too: Now the front-end. First the SSE helpers in `public/js/app.js`: Now the assistant view and its send logic: Let me refine the bubble to render markdown incrementally: N… #run-summary (fullstack-builder, 2026-11-14) <!-- productos-run:sj49d5lk9hphnk2ctn68kpzp -->
