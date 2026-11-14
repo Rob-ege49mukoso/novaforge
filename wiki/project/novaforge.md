@@ -3,8 +3,8 @@ title: NovaForge
 type: product
 stage: develop
 status: active
-version: 1.3.0
-updated_at: 2026-11-14T11:25Z
+version: 1.4.0
+updated_at: 2026-11-14T12:55Z
 ---
 
 # NovaForge
@@ -25,7 +25,7 @@ et les publie.
 | Stockage | Table unique `public.nfx_data` (Supabase) ou store local `data/db.json` |
 | Tests | `node --test` — `test/security.test.js`, `test/resources.test.js` |
 | Repo GitHub | `Rob-ege49mukoso/novaforge`, branche `integration-novaforge` |
-| Déploiement | Manuel (push GitHub + déclencheur de déploiement) |
+| Déploiement | Manuel — publication depuis la boîte « Publier » de l'interface (bouton « Déployer ») ; le projet Vercel est réutilisé à chaque republication, donc les commits suivants sur `integration-novaforge` se mettent en ligne sans nouvelle installation |
 
 ## Modules serveur
 

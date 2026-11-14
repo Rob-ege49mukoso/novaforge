@@ -76,3 +76,20 @@ updated_at: 2026-11-14T12:10Z
   tests. `SECURITY_NOTES.md` : titre en 1.4.0, limites résolues retirées,
   limites subsistantes conservées. Voir [Suite de tests et documentation
   v1.4](project/entity-suite-tests-v14.md).
+- **2026-11-14T12:45Z** — Fin du plan v1.4 confirmée par l'utilisateur (« C
+  fait »). État vérifié : branche `integration-novaforge` propre et
+  synchronisée avec `origin/integration-novaforge` (HEAD `c1a8571` — étape 4
+  sur 4), 10 fichiers de test présents dans `test/`, plan v1.4 entièrement
+  livré (étapes 1 à 4). Fiche produit passée en v1.4.0, vue d'ensemble
+  actualisée. Aucun déploiement public n'existe encore pour le projet — la mise
+  en ligne reste à déclencher.
+- **2026-11-14T12:55Z** — Mise en ligne demandée par l'utilisateur (« Déploie
+  la v1.4.0 en ligne, mais qu'elle soit disposé à accueillir des modifications
+  plus tard »). Le déploiement automatique est **refusé** sur ce projet : son
+  mode de publication est **manuel** — la mise en ligne se fait en cliquant
+  « Déployer » dans la boîte « Publier » de l'interface. Aucun déploiement
+  public n'existe encore. Point consigné : le projet Vercel est **réutilisé**
+  à chaque republication — une modification future se met en ligne en
+  poussant le commit sur `integration-novaforge` puis en republiquant depuis la
+  même boîte, sans nouvelle installation. Prévisualisation du bac à sable :
+  https://75851498f62b5db98fda0ee8aad67a1b.preview.bl.run

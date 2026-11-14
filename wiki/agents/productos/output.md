@@ -1,7 +1,7 @@
 ---
 title: ProductOS — journal d'orchestration
 stage: develop
-updated_at: 2026-11-14T12:10Z
+updated_at: 2026-11-14T12:45Z
 ---
 
 # ProductOS — journal d'orchestration
@@ -111,3 +111,39 @@ updated_at: 2026-11-14T12:10Z
 - Résultat : **QUEUED** — démarrage automatique en fin de tour.
 - En attente : validation de l'étape 4, puis décision de déploiement (le
   déploiement reste manuel : push GitHub + déclencheur).
+
+## 2026-11-14T12:45Z — Plan v1.4 terminé, v1.4.0 livrée
+
+- Utilisateur : « C fait » — le plan v1.4 est terminé, les quatre étapes
+  livrées et validées dans le code.
+- État vérifié à la clôture : branche `integration-novaforge` propre et
+  synchronisée avec `origin/integration-novaforge` (HEAD `c1a8571` — étape 4
+  sur 4 : tests élargis + documentation v1.4) ; 10 fichiers de test présents
+  dans `test/` ; 79 tests verts rapportés par le build (non réexécutés ici,
+  shell indisponible dans ce tour).
+- Étapes 1 à 4 : boucle d'outils + streaming SSE, passerelle de paiement
+  automatisée, épinglage d'IP anti-DNS-rebinding, suite de tests élargie +
+  documentation v1.4 — toutes livrées et consignées dans
+  `wiki/project/novaforge.md`.
+- Écrit cette tour : entrée brute du message, journal, vue d'ensemble
+  actualisée, fiche produit passée en v1.4.0.
+- Reste : la mise en ligne — aucun déploiement public n'existe encore pour le
+  projet ; l'étape est proposée à l'utilisateur avant d'être engagée.
+
+## 2026-11-14T12:55Z — Mise en ligne : mode manuel, publication depuis la boîte « Publier »
+
+- Utilisateur : « Déploie la v1.4.0 en ligne, mais qu'elle soit disposé à
+  accueillir des modifications plutard ».
+- Déploiement dispatché puis **refusé par la plateforme** : le mode de
+  publication de ce projet est **manuel** — la mise en ligne se déclenche en
+  cliquant « Déployer » dans la boîte « Publier » de l'interface. Aucun
+  déploiement public n'existe encore (`check_deploy_status` → NONE).
+- Consigné en mémoire projet : le projet Vercel est **réutilisé** à chaque
+  republication ; pour faire suivre une modification, pousser le commit sur
+  `integration-novaforge` puis republier depuis la même boîte — le même site
+  est mis à jour, pas une nouvelle installation. C'est exactement la
+  propriété « prêt à accueillir des modifications plus tard » demandée.
+- Prévisualisation du bac à sable en ligne :
+  https://75851498f62b5db98fda0ee8aad67a1b.preview.bl.run
+- En attente : action utilisateur — cliquer « Déployer » dans la boîte
+  « Publier ».

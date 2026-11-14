@@ -1,7 +1,7 @@
 ---
 title: Project overview
 stage: develop
-updated_at: 2026-11-14T09:25Z
+updated_at: 2026-11-14T12:45Z
 ---
 
 # NovaForge — vue d'ensemble
@@ -23,13 +23,17 @@ serveur, paiements mobiles manuels avec validation Super Admin, commission
 journal d'audit, sauvegarde/restauration, import de fichiers et ressources de
 projet.
 
-## Ce qui est en cours (v1.4)
+## v1.4 — livrée le 2026-11-14
 
-1. Boucle d'outils + streaming pour l'assistant et les agents IA — **livré**.
+Le plan de développement v1.4 est terminé, les quatre étapes étant livrées,
+testées et committées :
+
+1. Boucle d'outils + streaming SSE pour l'assistant et les agents IA — **livré**.
 2. Passerelle de paiement automatisée (Candy / Flutterwave), sur le modèle du
    patron « fournisseur IA » déjà en place — **livré**.
-3. Durcissement SSRF par épinglage d'IP (anti-DNS-rebinding) — en cours.
-4. Suite de tests élargie et documentation à jour — à venir.
+3. Durcissement SSRF par épinglage d'IP (anti-DNS-rebinding) — **livré**.
+4. Suite de tests élargie (79 tests sur 10 fichiers) et documentation v1.4
+   (`README.md`, `SECURITY_NOTES.md`) — **livré**.
 
 ## Contraintes structurantes
 
@@ -42,6 +46,11 @@ projet.
 ## État technique
 
 Bac à sable en cours d'exécution sur `:3000` (le serveur Node `:8080` est
-proxifié). Branche `integration-novaforge`, un commit d'historique visible,
-code applicatif non commité au dépôt GitHub tant que le déploiement n'est pas
-demandé.
+proxifié), prévisualisation :
+https://75851498f62b5db98fda0ee8aad67a1b.preview.bl.run. Branche
+`integration-novaforge` propre et synchronisée avec
+`origin/integration-novaforge` (HEAD `c1a8571` — étape 4 sur 4). Aucun
+déploiement public n'existe encore : la publication est **manuelle** (bouton
+« Déployer » de la boîte « Publier »), et le projet Vercel est réutilisé à
+chaque republication — les commits suivants se mettent en ligne sans nouvelle
+installation.
