@@ -27,3 +27,19 @@ updated_at: 2026-11-14T10:05Z
   à tous les appels sortants ; limites SSRF obsolètes retirées de
   SECURITY_NOTES. Étape 4 (tests élargis + documentation v1.4) restante.
 2026-11-14T11:44:18.665Z run fullstack-builder: NovaForge v1.4, étape 3 sur 4 : durcissement SSRF par épinglage d'IP. Le plan complet est dans wiki/project/novaforge.md, section v1.4 point 3 — lis-le d'abord. Aujourd'hui validateOutboundUrl (server/lib/network.js) résout le DNS, puis ch… — Let me read the plan for step 3 and confirm step 2's tests are green. Step 2 is green (39/39). Now let me map every outbound HTTP call site and the existing security tests. Let me probe the environment for what the pinned-IP implementation and its tests will need. Node 24 with `autoSelectFamily` — my lookup must honour `all:true`. Now let me write the hardened network layer. Now let me route every outbound call through the pinned client, starting with the LLM module. Now the test suite for the pinning. Let me first verify the TLS hostname-verification approach works in this environment. Now the SSRF pinning test suite: Let me restart the live server so the preview runs the new code, and ver… <!-- productos-run:ojdftmfd3q6rddza6ym5dyg7 -->
+- **2026-11-14T12:10Z** — État des lieux demandé par l'utilisateur : les étapes
+  1, 2 et 3 de la v1.4 sont livrées ; il ne reste que l'étape 4 (tests élargis
+  + documentation v1.4), dispatchée au Fullstack Builder. Couverture de test
+  actuelle : sécurité, ressources, boucle d'outils, streaming, passerelle,
+  réseau — auth, quotas, facturation, moteur de génération et automatisation
+  restent à couvrir. `SECURITY_NOTES.md` a déjà sa section v1.4.0 ; `README.md`
+  annonce encore la passerelle pour une version future et n'a pas de section
+  v1.4.0.
+2026-11-14T12:08:29.072Z run productos-orchestrator: Qu'est ce qui reste maintenant ? — I'll check the project's current state to see what's left. Le plan v1.4 est presque terminé. Je vérifie la base de tests avant d'engager la dernière étape. Sur les quatre étapes du plan v1.4, il n'en reste qu'une. **Livré et vérifié dans le code :** - Étape 1 — boucle d'outils + streaming SSE (assistant et agents) - Étape 2 — passerelle de paiement automatisée (Flutterwave + adaptateur générique « Candy ») - Étape 3 — durcissement SSRF par épinglage d'IP (anti-DNS-rebinding) **Reste — l'étape 4, tests élargis + documentation v1.4 :** - *Tests* —6 fichiers couvrent aujourd'hui sécurité, ressources, boucle d'outils, streaming, passerelle et réseau. Restent à couvrir : **auth** (inscription, c… <!-- productos-run:qu7nqg8wbscwoezwkqd2s3ss -->
+- **2026-11-14T12:10Z** — v1.4 étape 4 livrée : quatre nouveaux fichiers de
+  test (auth, quotas + facturation, moteur de génération, automatisation) ;
+  les tests des étapes 1 à 3 sont inchangés et verts — 79 tests au total.
+  `README.md` et `SECURITY_NOTES.md` passés en v1.4.0 (section v1.4.0
+  ajoutée, limites résolues retirées, limites subsistantes conservées).
+  **Le plan v1.4 est terminé** : il reste l'étape suivante du cycle produit
+  (à définir par l'utilisateur).

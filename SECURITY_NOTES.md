@@ -1,4 +1,4 @@
-# Notes de sécurité — NovaForge 1.1.0
+# Notes de sécurité — NovaForge 1.4.0
 
 Cette révision corrige plusieurs risques identifiés lors de l'audit du ZIP d'origine.
 
@@ -15,10 +15,9 @@ Cette révision corrige plusieurs risques identifiés lors de l'audit du ZIP d'o
 
 ## Limites à connaître
 
-- ~~Le contrôle DNS des URL sortantes est une défense contre les destinations privées, mais ne constitue pas un mécanisme de pinning DNS au niveau socket.~~ **Résolu en v1.4** : la cible est résolue une seule fois, toutes les adresses obtenues sont validées, et la connexion part vers l'adresse validée tout en conservant la vérification TLS du nom d'hôte (voir « Version 1.4.0 »).
 - Le runtime d'API est volontairement limité aux API produites par les gabarits internes. Les modifications manuelles de `api.js` ne sont pas exécutées.
 - Les commandes shell nécessiteraient un exécuteur isolé distinct (conteneur/VM avec quotas et permissions minimales) avant de pouvoir être réactivées.
-- Les tests fournis sont des tests unitaires et des tests de démarrage ciblés. Ils ne remplacent pas un audit d'intrusion externe ni une recette complète de toutes les fonctions métier.
+- Les tests fournis sont une suite automatisée interne (79 tests) : ils ne remplacent pas un audit d’intrusion externe ni une recette complète de toutes les fonctions métier.
 
 
 ## Version 1.2.0 — importation de fichiers
@@ -29,7 +28,6 @@ Cette révision corrige plusieurs risques identifiés lors de l'audit du ZIP d'o
 - Les ZIP ne sont pas décompressés automatiquement (protection contre Zip Slip et les archives bombes).
 - Téléchargement forcé en pièce jointe par défaut ; aperçu inline limité à quelques formats image/vidéo/audio connus et avec `X-Content-Type-Options: nosniff`.
 - Le stockage binaire reste sur le système de fichiers. Un disque persistant Render est nécessaire pour garantir la conservation des fichiers après redéploiement.
-- ~~Limite résiduelle : le contrôle DNS avant une requête sortante ne constitue pas un pinning DNS complet.~~ **Résolu en v1.4** : l'épinglage d'IP est en place pour tous les appels sortants (MCP, automatisations, fournisseurs IA, passerelle de paiement, outils web des agents).
 
 ## Version 1.3.0 — ressources de projet
 

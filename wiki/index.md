@@ -12,6 +12,7 @@ updated_at: 2026-11-14T11:25Z
 - [Boucle d'outils et streaming](project/entity-boucle-outils-streaming.md) — boucle d'outils, moteur NovaCore, protocole SSE (v1.4 étape 1)
 - [Passerelle de paiement automatisée](project/entity-passerelle-paiement.md) — adaptateurs, test de connexion réel, webhook signé, idempotence (v1.4 étape 2)
 - [Épinglage d'IP (anti-DNS-rebinding)](project/entity-epinglage-ip.md) — résolution unique, adresse validée, TLS conservé, redirections re-validées (v1.4 étape 3)
+- [Suite de tests et documentation v1.4](project/entity-suite-tests-v14.md) — couverture auth, quotas, facturation, génération, automatisation ; README et SECURITY_NOTES à jour (v1.4 étape 4)
 - [Vue d'ensemble](overview.md) — synthèse du projet et de l'état d'avancement
 
 ## Journal

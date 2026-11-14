@@ -1,7 +1,7 @@
 ---
 title: Journal
 stage: develop
-updated_at: 2026-11-14T11:40Z
+updated_at: 2026-11-14T12:10Z
 ---
 
 # Journal
@@ -51,3 +51,28 @@ updated_at: 2026-11-14T11:40Z
   paiement, outil `web_fetch` des agents. Limites SSRF obsolètes retirées de
   SECURITY_NOTES. `node --test` : 48 tests verts (10 nouveaux dans
   `test/network.test.js`). Voir [Épinglage d'IP](project/entity-epinglage-ip.md).
+- **2026-11-14T12:10Z** — v1.4 étape 4 dispatchée au Fullstack Builder : suite de
+  tests automatisés élargie (aujourd'hui seuls sécurité, ressources, boucle
+  d'outils, streaming, passerelle et réseau sont couverts — il manque auth,
+  quotas, facturation, moteur de génération et automatisation) + documentation
+  v1.4 (README.md : ligne obsolète annonçant la passerelle pour une version
+  future à corriger, section v1.4.0 à ajouter, version à mettre à jour ;
+  SECURITY_NOTES.md : section v1.4.0 déjà présente, ne conserver que les limites
+  qui subsistent). Contraintes transmises : ne pas réécrire les étapes 1 à 3,
+  tests existants verts, zéro dépendance npm, Node 20, tout en français.
+- **2026-11-14T12:10Z** — v1.4 étape 4 livrée : suite de tests élargie et
+  documentation v1.4. Quatre nouveaux fichiers de test — `test/auth.test.js`
+  (inscription, connexion, sessions, rôles, permissions, compte bloqué),
+  `test/quotas-billing.test.js` (quotas journaliers creations/applications,
+  demande de paiement mobile money, validation, activation d'offre,
+  comptabilité 10 %, idempotence), `test/generator.test.js` (compréhension,
+  fichiers produits, tests obligatoires réellement exécutés, versionnage) et
+  `test/automation.test.js` (consignes, exécution réelle, protection SSRF,
+  planification, historique). Les fichiers des étapes 1 à 3 sont inchangés :
+  **79 tests verts**, zéro dépendance npm, tout en français. `README.md` :
+  version 1.4.0, ligne sur les paiements automatisés corrigée (livrés, plus
+  « prévus »), limite retirée, section « Version 1.4.0 » ajoutée (streaming
+  SSE, passerelle de paiement, épinglage d'IP) et tableau de la suite de
+  tests. `SECURITY_NOTES.md` : titre en 1.4.0, limites résolues retirées,
+  limites subsistantes conservées. Voir [Suite de tests et documentation
+  v1.4](project/entity-suite-tests-v14.md).

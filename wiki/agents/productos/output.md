@@ -1,7 +1,7 @@
 ---
 title: ProductOS — journal d'orchestration
 stage: develop
-updated_at: 2026-11-14T11:05Z
+updated_at: 2026-11-14T12:10Z
 ---
 
 # ProductOS — journal d'orchestration
@@ -83,3 +83,31 @@ updated_at: 2026-11-14T11:05Z
   `SECURITY_NOTES.md` à jour.
 - Résultat : **QUEUED** — démarrage automatique en fin de tour.
 - En attente : étape 4 (tests élargis + documentation v1.4).
+
+## 2026-11-14T12:10Z — Étape 3 validée, étape 4 dispatchée
+
+- État des lieux demandé par l'utilisateur (« qu'est-ce qui reste ? ») :
+  l'état réel du dépôt et du wiki confirme que les étapes 1, 2 et 3 sont
+  livrées et documentées ; il ne reste que l'étape 4 du plan v1.4.
+- Étape 3 (épinglage d'IP) confirmée livrée et relue dans le code :
+  `requestOutbound()` dans `server/lib/network.js`, résolution unique,
+  validation de toutes les adresses, `lookup` personnalisé sur
+  `node:http`/`node:https`, nom d'hôte conservé pour l'en-tête `Host`, le SNI
+  et la vérification du certificat, redirections re-résolues et re-validées,
+  IPv6 et IPv4 mappées traitées. `test/network.test.js` ajouté (10 tests) ;
+  48 tests verts au total selon le journal de l'étape 3.
+- Couverture de test relevée avant dispatch (6 fichiers) : `security`,
+  `resources`, `llm-tools`, `chat-stream`, `payments`, `network`. Manquants :
+  auth (comptes, sessions, rôles, blocage), quotas, facturation
+  (abonnement, activation d'offre), moteur de génération, automatisation.
+- Documentation : `SECURITY_NOTES.md` porte déjà sa section v1.4.0 (étapes 2
+  et 3) ; `README.md` annonce encore la passerelle pour une version future et
+  n'a pas de section v1.4.0 — c'est l'écart à corriger.
+- Étape 4 dispatchée au Fullstack Builder : nouveaux fichiers de test pour les
+  cinq domaines non couverts, mise à jour de `README.md` (ligne obsolète
+  retirée, section v1.4.0 ajoutée, version à jour), `SECURITY_NOTES.md`
+  réduit aux limites qui subsistent. Contraintes : ne pas réécrire les étapes
+  1 à 3, tests existants verts, zéro dépendance npm, Node 20, français.
+- Résultat : **QUEUED** — démarrage automatique en fin de tour.
+- En attente : validation de l'étape 4, puis décision de déploiement (le
+  déploiement reste manuel : push GitHub + déclencheur).

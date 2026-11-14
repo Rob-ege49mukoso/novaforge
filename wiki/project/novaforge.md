@@ -119,7 +119,7 @@ streaming SSE), MCP, automatisations, passerelle de paiement, outil
 `web_fetch` des agents. Limites résolues retirées de SECURITY_NOTES.
 Détail : [Épinglage d'IP](entity-epinglage-ip.md).
 
-### 4. Suite de tests automatisés élargie + documentation v1.4
+### 4. Suite de tests automatisés élargie + documentation v1.4 — **livré le 2026-11-14**
 
 - Couvrir auth, quotas, facturation, moteur de génération, automatisation,
   streaming et passerelle de paiement (les tests existants ne couvrent que
@@ -127,6 +127,17 @@ Détail : [Épinglage d'IP](entity-epinglage-ip.md).
 - Mettre à jour `README.md` et `SECURITY_NOTES.md` (version 1.4.0) pour
   refléter ce qui est réellement livré, et retirer les limites résolues tout
   en conservant celles qui subsistent.
+
+**État :** livré. Quatre nouveaux fichiers de test (auth, quotas + facturation,
+moteur de génération, automatisation) ; les fichiers des étapes 1 à 3 sont
+inchangés et restent verts — **79 tests** au total, zéro dépendance npm, tout
+en français. `README.md` : version 1.4.0, ligne corrigée sur les paiements
+automatisés (livrés et non plus « prévus »), limite correspondante retirée,
+section « Version 1.4.0 » ajoutée (streaming SSE, passerelle de paiement,
+épinglage d'IP) et tableau de la suite de tests. `SECURITY_NOTES.md` : titre
+passé en 1.4.0, limites résolues retirées, limites subsistantes conservées,
+section v1.4.0 déjà en place. Détail : [Suite de tests et documentation
+v1.4](entity-suite-tests-v14.md).
 
 ## Limites connues qui subsistent après la v1.4
 

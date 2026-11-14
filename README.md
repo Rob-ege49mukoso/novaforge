@@ -2,6 +2,8 @@
 
 Plateforme web **réellement fonctionnelle** (Node.js, 0 dépendance npm) qui permet à n’importe quel utilisateur de transformer une idée exprimée en langage naturel en **application, API ou agent IA réellement fonctionnel**, puis de le tester, le modifier, le versionner et le publier.
 
+> **Version 1.4.0** — Node.js 20+, **zéro dépendance npm**, suite de tests automatisés (`node --test`).
+
 ## Démarrage
 
 ```bash
@@ -60,6 +62,9 @@ Au premier lancement, la plateforme affiche l’écran **Setup** : le compte **p
 | Commission 10 % (configurable) : historique, brut / commission / net, aucun double prélèvement, **aucune transaction simulée** | ✅ |
 | **Gestionnaire MCP** : ajout manuel (nom, URL, auth, secrets côté serveur), test réel `initialize` + `tools/list`, activation/désactivation, autorisation par outil | ✅ |
 | **Orchestration multi-IA** : fournisseurs configurables (OpenAI, OpenRouter, Anthropic, **Ollama local**, compatible OpenAI), test de connexion réel (jamais « connecté » sans succès), choix du modèle par utilisateur, suivi de consommation, **bascule automatique uniquement en cas d’erreur** | ✅ |
+| **Boucle d’outils + streaming SSE** : l’assistant et les agents exécutent réellement les outils (calcul, date, web, MCP) et répondent **fragment par fragment**, avec arrêt possible | ✅ |
+| **Passerelle de paiement automatisée** : Flutterwave (contrat officiel) ou adaptateur générique configurable, test de connexion réel, webhook signé et idempotent, **activation automatique de l’offre** | ✅ |
+| **Épinglage d’IP** sur tous les appels sortants (anti-DNS-rebinding), redirections re-validées, vérification TLS du nom d’hôte conservée | ✅ |
 | **Automatisation** : tâches en ligne (HTTP/web) et hors ligne (fichiers, commandes shell) **sur la machine où la plateforme est installée**, planning (« tous les jours à 8h », « dans 30 min »), **confirmation obligatoire pour les commandes**, historique complet, info système | ✅ |
 | Super Admin : statistiques, gestion des utilisateurs (bloquer/supprimer/sous-admins + permissions précises), modération des projets, tarifs, paiements, fournisseurs, quotas, journaux d’audit, sauvegarde/restauration | ✅ |
 | Journal d’audit de toutes les opérations sensibles | ✅ |
@@ -69,7 +74,7 @@ Au premier lancement, la plateforme affiche l’écran **Setup** : le compte **p
 - `server/lib/*` : chaque domaine est un module isolé (db, auth, llm, mcp, automation) — brancher SQLite/PostgreSQL = remplacer `lib/db.js` ; ajouter un fournisseur IA = 1 bloc dans `lib/llm.js`.
 - `server/generator/*` : moteur de création et gabarits — ajouter un nouveau « domaine métier » = une entrée dans `templates.js`.
 - Routes déclaratives dans `server/app.js` (table `routes`) — ajouter une fonctionnalité = ajouter des routes.
-- L’architecture des **paiements automatisés** est prévue : l’interface `billing/payment` accepte déjà référence + preuve ; un gateway (Candy, Flutterwave…) se branchera sur le même flux de validation.
+- Les **paiements automatisés** sont branchés sur le même flux de validation : passerelle configurable côté Super Admin (Flutterwave ou adaptateur générique), test de connexion réel, webhook signé et idempotent, activation automatique de l’offre.
 - **Auto-amélioration contrôlée** : toute évolution passe par version (restauration possible), tests, et l’approbation du Super Admin (paramètres/tarifs/modération). L’IA ne modifie jamais elle-même règles de sécurité ou rôles.
 
 ## Configuration des clés IA (étapes)
@@ -82,11 +87,28 @@ Au premier lancement, la plateforme affiche l’écran **Setup** : le compte **p
 ## Tests effectués lors de la mise en place
 Setup, inscription/connexion, blocage de compte, quotas, génération app/api/agent + tests réels, runtime API (CRUD HTTP), versions/restauration, publication + modération, paiement → validation → activation, commission, MCP (serveur de démo `scripts/mcp-mock.js` : `node scripts/mcp-mock.js`), automatisation (HTTP + commande avec confirmation), journal d’audit, sauvegarde.
 
+### Suite de tests automatisés (`node --test`)
+
+79 tests, sans aucune dépendance npm, tous en français :
+
+| Fichier | Couverture |
+|---|---|
+| `test/security.test.js` | politique réseau, commandes shell désactivées, traversée de chemin, runtime d’API |
+| `test/resources.test.js` | sélection, extraction et conversion des fichiers importés |
+| `test/llm-tools.test.js` | boucle d’outils, garde-fous anti-boucle, moteur local NovaCore, trames SSE |
+| `test/chat-stream.test.js` | points d’entrée de chat : mode JSON historique et streaming SSE |
+| `test/payments.test.js` | passerelle : signatures, test de connexion réel, idempotence, activation, comptabilité |
+| `test/network.test.js` | épinglage d’IP, rebinding, redirections re-validées, IPv6 et IPv4 mappées, TLS |
+| `test/auth.test.js` | inscription, connexion, sessions, rôles, permissions, compte bloqué |
+| `test/quotas-billing.test.js` | quotas journaliers (créations et applications), facturation, activation d’offre |
+| `test/generator.test.js` | moteur de génération : compréhension, fichiers produits, tests obligatoires, versionnage |
+| `test/automation.test.js` | automatisation : consignes, exécution réelle, protection SSRF, planification, historique |
+
 ## Limites honnêtes (v1 → roadmap)
 - Les apps générées sont des **web apps autonomes** (données locales). L’export Android APK nécessitera une chaîne de build (roadmap) ; les apps sont déjà responsive/PWA.
 - L’automatisation pilote **la machine hôte** de NovaForge ; un « compagnon » pour d’autres appareils est en roadmap.
-- Les paiements automatisés (gateway) arrivent dans une prochaine version (l’interface est prête).
-- Le moteur local couvre les fonctions essentielles ; les réponses conversationnelles riches et l’usage avancé des outils par les agents s’activent avec un fournisseur IA connecté.
+- Les commandes shell restent **désactivées** tant qu’aucun exécuteur isolé (conteneur/VM) n’est mis en place.
+- Le moteur local couvre les fonctions essentielles (assistant, agents, outils, streaming) ; les **réponses conversationnelles les plus riches** s’obtiennent avec un fournisseur IA connecté.
 
 ## Sauvegarde / restauration
 `POST /api/v1/admin/backup` (bouton dans Administration) crée un snapshot de la base dans `data/backups/`. Les projets vivent dans `data/projects/<id>/v<N>/`.
@@ -111,3 +133,28 @@ L’espace **Mes fichiers** accepte plusieurs fichiers de tous types : ZIP, imag
 - Les images, vidéos, fichiers audio, PDF, ZIP et autres binaires restent conservés et liés comme ressources ; ils ne sont pas exécutés. Leur analyse multimodale ou l’extraction automatique des archives n’est pas activée dans cette version.
 - « Compresser (.gz) » crée une copie GZIP ; « Convertir en MD » convertit les documents texte compatibles. Les originaux ne sont jamais écrasés.
 - Les transformations consomment le quota de stockage personnel.
+
+## Version 1.4.0
+
+Trois livrables fonctionnels, tous vérifiés par la suite de tests automatisés décrite plus haut.
+
+### 🔁 Boucle d’outils et streaming (assistant & agents)
+
+L’assistant et les agents exécutent réellement les outils : la boucle complète `appel du modèle → exécution de l’outil → renvoi du résultat dans la conversation → réponse finale`. Le moteur local NovaCore produit des appels d’outils au même format normalisé, donc les agents fonctionnent **sans fournisseur IA**. Garde-fous en place : nombre maximum d’itérations, nombre maximum d’appels, détection des cycles (même outil, mêmes arguments), trace `tools_used` exposée dans la réponse.
+
+Les deux points d’entrée de chat (`/api/v1/assistant/chat` et `/api/v1/projects/:id/chat`) acceptent `stream: true` et renvoient alors un **flux SSE** : fragments progressifs, indicateur de saisie, bouton d’arrêt. Le mode JSON historique est conservé (aucune régression pour les clients existants).
+
+### 💳 Passerelle de paiement automatisée
+
+Sur le patron des fournisseurs IA : configuration côté Super Admin, **test de connexion réel**, statut « actif » **seulement après succès**, clés jamais renvoyées en clair (seule une empreinte masquée est exposée).
+
+- **Flutterwave** : contrat API officiel documenté (`POST /payments`, `GET /transactions/{id}/verify`, en-tête de webhook `verif-hash`).
+- **Adaptateur générique** (« Candy ») : entièrement décrit par le Super Admin (URL de base, secret, chemins, schéma de signature, schémas de réponse). **Aucun endpoint n’est supposé** : tant que le contrat n’est pas renseigné, l’adaptateur refuse de fonctionner.
+
+Initialisation du paiement → notification signée sur le corps brut (HMAC-SHA256 ou en-tête `verif-hash`, comparaison à temps constant) → **activation automatique de l’offre** (30 jours). Traitement **idempotent** : notification rejouée sans double effet, montant ou devise divergents refusés, transaction en échec sans activation. Le flux mobile money manuel (M-Pesa, Orange Money, Airtel Money) et la commission 10 % (brut / commission / net) restent **intacts** ; aucune transaction n’est simulée.
+
+### 🔒 Épinglage d’IP (anti-DNS-rebinding)
+
+Tous les appels sortants passent par un client unique : **une seule résolution DNS** par requête, validation de **toutes** les adresses obtenues, puis connexion à l’adresse validée via un `lookup` personnalisé (`node:http` / `node:https`, zéro dépendance npm). Le nom d’hôte est conservé pour l’en-tête `Host`, le SNI et la **vérification du certificat** — qui n’est ni désactivée ni contournée. Les redirections sont suivies mais **re-résolues et re-validées** à chaque saut ; les adresses IPv6 et IPv4 mappées (`::ffff:`, NAT64) sont contrôlées avec les règles IPv4.
+
+Concerne les fournisseurs IA (dont le streaming SSE), le serveur MCP, les automatisations, la passerelle de paiement et l’outil `web_fetch` des agents.
